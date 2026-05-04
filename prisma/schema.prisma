@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int             @id @default(autoincrement())
+  name      String          @db.NVarChar(200)
+  email     String          @unique @db.NVarChar(320)
+  password  String          @db.NVarChar(200)
+  role      String          @db.NVarChar(50)   // "admin" | "sales_rep"
+  active    Boolean         @default(true)
+  joined    DateTime        @default(now())
+  lastLogin DateTime?
+  leads     Lead[]          @relation("LeadAssignee")
+  deals     Deal[]          @relation("DealAssignee")
+  clients   Client[]        @relation("ClientAssignee")
+  tasks     Task[]          @relation("TaskAssignee")
+  calEvents CalendarEvent[]
+
+  @@map("users")
+}
+
+model Lead {
+  id         Int      @id @default(autoincrement())
+  name       String   @db.NVarChar(200)
+  company    String   @db.NVarChar(200)
+  email      String?  @db.NVarChar(320)
+  phone      String?  @db.NVarChar(30)
+  status     String   @db.NVarChar(20)   // "new"|"contacted"|"qualified"|"disqualified"
+  score      Int      @default(0)
+  value      Decimal  @db.Decimal(18, 2)
+  source     String?  @db.NVarChar(50)
+  assigneeId Int
+  notes      String?  @db.NVarChar(Max)
+  created    DateTime @default(now())
+  activity   String?  @db.NVarChar(Max)  // JSON: [{type,text,time,user}]
+  assignee   User     @relation("LeadAssignee", fields: [assigneeId], references: [id])
+
+  @@index([company])
+  @@index([phone])
+  @@index([assigneeId])
+  @@map("leads")
+}
+
+model Deal {
+  id          Int       @id @default(autoincrement())
+  title       String    @db.NVarChar(300)
+  company     String    @db.NVarChar(200)
+  clientId    Int?
+  value       Decimal   @db.Decimal(18, 2)
+  probability Int
+  stage       String    @db.NVarChar(30)   // "lead"|"discovery"|"proposal"|"negotiation"|"closed_won"
+  assigneeId  Int
+  closeDate   DateTime?
+  health      Int       @default(60)
+  assignee    User      @relation("DealAssignee", fields: [assigneeId], references: [id])
+  client      Client?   @relation(fields: [clientId], references: [id])
+
+  @@index([stage])
+  @@index([assigneeId])
+  @@map("deals")
+}
+
+model Client {
+  id         Int             @id @default(autoincrement())
+  name       String          @unique @db.NVarChar(200)
+  industry   String          @db.NVarChar(50)
+  email      String?         @db.NVarChar(320)
+  phone      String?         @db.NVarChar(30)
+  address    String?         @db.NVarChar(300)
+  website    String?         @db.NVarChar(200)
+  size       String?         @db.NVarChar(20)   // "1-10"|"10-50"|"50-200"|"200+"
+  status     String          @db.NVarChar(20)   // "active"|"prospect"
+  since      DateTime
+  assigneeId Int
+  notes      String?         @db.NVarChar(Max)
+  assignee   User            @relation("ClientAssignee", fields: [assigneeId], references: [id])
+  contacts   ClientContact[]
+  projects   Project[]
+  deals      Deal[]
+
+  @@map("clients")
+}
+
+model ClientContact {
+  id          Int       @id @default(autoincrement())
+  clientId    Int
+  name        String    @db.NVarChar(200)
+  role        String?   @db.NVarChar(100)
+  email       String?   @db.NVarChar(320)
+  phone       String?   @db.NVarChar(30)
+  main        Boolean   @default(false)
+  lastContact DateTime?
+  deals       Int       @default(0)
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("client_contacts")
+}
+
+model Project {
+  id         Int            @id @default(autoincrement())
+  clientId   Int
+  contactId  Int?
+  name       String         @db.NVarChar(300)
+  desc       String?        @db.NVarChar(Max)
+  status     String         @db.NVarChar(20)   // "planning"|"active"|"paused"|"completed"
+  priority   String         @db.NVarChar(10)   // "high"|"medium"|"low"
+  budget     Decimal        @db.Decimal(18, 2)
+  spent      Decimal        @default(0)        @db.Decimal(18, 2)
+  progress   Int            @default(0)
+  startDate  DateTime?
+  endDate    DateTime?
+  assigneeId Int
+  tags       String?        @db.NVarChar(500)  // JSON: ["tag1","tag2"]
+  client     Client         @relation(fields: [clientId], references: [id])
+  phases     ProjectPhase[]
+
+  @@index([clientId])
+  @@index([assigneeId])
+  @@map("projects")
+}
+
+model ProjectPhase {
+  id        Int       @id @default(autoincrement())
+  projectId Int
+  name      String    @db.NVarChar(200)
+  status    String    @db.NVarChar(20)   // "pending"|"active"|"done"|"blocked"
+  startDate DateTime?
+  endDate   DateTime?
+  budget    Decimal   @default(0) @db.Decimal(18, 2)
+  spent     Decimal   @default(0) @db.Decimal(18, 2)
+  notes     String?   @db.NVarChar(Max)
+  order     Int       @default(0)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("project_phases")
+}
+
+model Task {
+  id         Int      @id @default(autoincrement())
+  desc       String   @db.NVarChar(500)
+  type       String   @db.NVarChar(20)   // "call"|"email"|"meeting"|"proposal"|"followup"|"other"
+  priority   String   @db.NVarChar(10)   // "high"|"medium"|"low"
+  date       DateTime
+  time       String?  @db.NVarChar(5)
+  client     String?  @db.NVarChar(200)
+  notes      String?  @db.NVarChar(Max)
+  status     String   @db.NVarChar(10)   // "open"|"done"
+  assigneeId Int
+  created    DateTime @default(now())
+  assignee   User     @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  @@index([assigneeId, status])
+  @@map("tasks")
+}
+
+model CalendarEvent {
+  id         Int      @id @default(autoincrement())
+  title      String   @db.NVarChar(400)
+  date       DateTime
+  time       String?  @db.NVarChar(5)
+  endTime    String?  @db.NVarChar(5)
+  type       String   @db.NVarChar(20)   // "meeting"|"call"|"demo"|"task"|"other"
+  assigneeId Int
+  client     String?  @db.NVarChar(200)
+  notes      String?  @db.NVarChar(Max)
+  location   String?  @db.NVarChar(300)
+  color      String?  @db.NVarChar(7)
+  gcEventId  String?  @db.NVarChar(200)
+  assignee   User     @relation(fields: [assigneeId], references: [id])
+
+  @@index([assigneeId, date])
+  @@map("calendar_events")
+}
+
+model Automation {
+  id      Int     @id @default(autoincrement())
+  name    String  @db.NVarChar(200)
+  trigger String  @db.NVarChar(300)
+  action  String  @db.NVarChar(300)
+  active  Boolean @default(true)
+  runs    Int     @default(0)
+
+  @@map("automations")
+}
+
+model LeadIntegration {
+  id           Int     @id @default(autoincrement())
+  sourceId     String  @unique @db.NVarChar(50)
+  label        String  @db.NVarChar(100)
+  method       String  @db.NVarChar(20)           // "webhook"|"polling"
+  status       String  @db.NVarChar(20)           // "active"|"inactive"
+  pollInterval String? @db.NVarChar(50)
+  accessToken  String? @db.NVarChar(Max)          // AES-256 encrypted at app layer
+  webhookUrl   String? @db.NVarChar(500)
+  fieldMapping String? @db.NVarChar(Max)          // JSON: {"full_name":"name"}
+  totalLeads   Int     @default(0)
+  todayLeads   Int     @default(0)
+
+  @@map("lead_integrations")
+}

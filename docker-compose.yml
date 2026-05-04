@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: salesflow-crm
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      # Copy these from your .env file or inject via CI/CD secrets
+      DATABASE_URL: ${DATABASE_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+    extra_hosts:
+      # Allows the container to reach the host machine's MSSQL server
+      # Replace with your actual MSSQL host if it's a remote server
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# MSSQL is external — no db service defined here.
+# Ensure DATABASE_URL points to the existing MSSQL server.
+# Example: sqlserver://host.docker.internal:1433;database=SalesFlowCRM;...
