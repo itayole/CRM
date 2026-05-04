@@ -4,7 +4,8 @@
       "Bash(npm install *)",
       "mcp__Claude_Preview__preview_start",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(rm \"//dc/Shiluv-Data/Develop/CRM/.git/index.lock\")"
     ]
   }
 }
