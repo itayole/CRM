@@ -39,7 +39,7 @@ model Lead {
   notes      String?  @db.NVarChar(Max)
   created    DateTime @default(now())
   activity   String?  @db.NVarChar(Max)  // JSON: [{type,text,time,user}]
-  assignee   User     @relation("LeadAssignee", fields: [assigneeId], references: [id])
+  assignee   User     @relation("LeadAssignee", fields: [assigneeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([company])
   @@index([phone])
@@ -58,8 +58,9 @@ model Deal {
   assigneeId  Int
   closeDate   DateTime?
   health      Int       @default(60)
-  assignee    User      @relation("DealAssignee", fields: [assigneeId], references: [id])
-  client      Client?   @relation(fields: [clientId], references: [id])
+  // NoAction on both sides breaks the dual cascade path: User→Deal (direct) vs User→Client→Deal (indirect)
+  assignee    User      @relation("DealAssignee", fields: [assigneeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  client      Client?   @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([stage])
   @@index([assigneeId])
@@ -79,7 +80,7 @@ model Client {
   since      DateTime
   assigneeId Int
   notes      String?         @db.NVarChar(Max)
-  assignee   User            @relation("ClientAssignee", fields: [assigneeId], references: [id])
+  assignee   User            @relation("ClientAssignee", fields: [assigneeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   contacts   ClientContact[]
   projects   Project[]
   deals      Deal[]
@@ -118,7 +119,8 @@ model Project {
   endDate    DateTime?
   assigneeId Int
   tags       String?        @db.NVarChar(500)  // JSON: ["tag1","tag2"]
-  client     Client         @relation(fields: [clientId], references: [id])
+  // NoAction breaks the dual cascade path: User→Project (direct) vs User→Client→Project (indirect)
+  client     Client         @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   phases     ProjectPhase[]
 
   @@index([clientId])
@@ -155,7 +157,7 @@ model Task {
   status     String   @db.NVarChar(10)   // "open"|"done"
   assigneeId Int
   created    DateTime @default(now())
-  assignee   User     @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  assignee   User     @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([assigneeId, status])
   @@map("tasks")
@@ -174,7 +176,7 @@ model CalendarEvent {
   location   String?  @db.NVarChar(300)
   color      String?  @db.NVarChar(7)
   gcEventId  String?  @db.NVarChar(200)
-  assignee   User     @relation(fields: [assigneeId], references: [id])
+  assignee   User     @relation(fields: [assigneeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([assigneeId, date])
   @@map("calendar_events")

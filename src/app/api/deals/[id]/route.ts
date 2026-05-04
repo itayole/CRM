@@ -36,22 +36,24 @@ async function getDealOrForbid(
   return deal;
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const result = await getDealOrForbid(Number(params.id), session);
+  const { id: rawId } = await params;
+  const result = await getDealOrForbid(Number(rawId), session);
   if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (result === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   return NextResponse.json(result);
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const id = Number(params.id);
+  const { id: rawId } = await params;
+  const id = Number(rawId);
   const result = await getDealOrForbid(id, session);
   if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (result === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -82,7 +84,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(updated);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -90,7 +92,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const id = Number(params.id);
+  const { id: rawId } = await params;
+  const id = Number(rawId);
   const deal = await prisma.deal.findUnique({ where: { id } });
   if (!deal) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

@@ -31,9 +31,8 @@ export default withAuth(
     return NextResponse.next();
   },
   {
+    pages: { signIn: "/login" },
     callbacks: {
-      // Return true to allow the middleware function above to run;
-      // withAuth handles the redirect to /login when token is absent.
       authorized: ({ token }) => !!token,
     },
   }
@@ -41,7 +40,7 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    // Protect all routes except public ones
-    "/((?!login|_next/static|_next/image|favicon.ico|api/auth).*)",
+    // Protect all routes except public ones and the health check
+    "/((?!login|_next/static|_next/image|favicon.ico|api/auth|api/health).*)",
   ],
 };

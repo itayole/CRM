@@ -27,28 +27,28 @@ async function getLeadOrForbid(id: number, session: Awaited<ReturnType<typeof ge
   return lead;
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const id = Number(params.id);
-  const result = await getLeadOrForbid(id, session);
+  const { id: rawId } = await params;
+  const result = await getLeadOrForbid(Number(rawId), session);
   if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (result === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   return NextResponse.json(result);
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const id = Number(params.id);
+  const { id: rawId } = await params;
+  const id = Number(rawId);
   const result = await getLeadOrForbid(id, session);
   if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (result === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  // sales_rep cannot reassign leads to another user
   const body = await req.json();
   if (session.user.role !== "admin") delete body.assigneeId;
 
@@ -61,7 +61,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(updated);
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -69,7 +69,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const id = Number(params.id);
+  const { id: rawId } = await params;
+  const id = Number(rawId);
   const lead = await prisma.lead.findUnique({ where: { id } });
   if (!lead) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

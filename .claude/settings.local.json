@@ -5,7 +5,12 @@
       "mcp__Claude_Preview__preview_start",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(rm \"//dc/Shiluv-Data/Develop/CRM/.git/index.lock\")"
+      "Bash(rm \"//dc/Shiluv-Data/Develop/CRM/.git/index.lock\")",
+      "Bash(npm audit *)",
+      "Bash(node_modules/.bin/next dev *)",
+      "Bash(kill %1)",
+      "Bash(wait)",
+      "Bash(npx prisma *)"
     ]
   }
 }
