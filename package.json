@@ -11,9 +11,9 @@
     "start": "next start",
     "lint": "next lint",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
-    "db:push": "prisma db push",
-    "db:studio": "prisma studio"
+    "db:migrate": "node scripts/resolve-port.mjs migrate deploy",
+    "db:push": "node scripts/resolve-port.mjs db push",
+    "db:studio": "node scripts/resolve-port.mjs studio"
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",
