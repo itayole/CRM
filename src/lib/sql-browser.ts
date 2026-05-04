@@ -9,13 +9,26 @@ function discoverPort(host: string, instance: string): Promise<number> {
       reject(new Error(`SQL Browser timeout — is the SQL Server Browser service running on ${host}?`));
     }, 5000);
 
-    socket.on("message", (msg) => {
+    socket.on("message", (msg, rinfo) => {
       clearTimeout(timer);
       socket.close();
+
+      // Reject replies from unexpected sources (basic UDP spoofing mitigation)
+      if (rinfo.address !== host) {
+        reject(new Error(`SQL Browser reply came from ${rinfo.address}, expected ${host}`));
+        return;
+      }
+
       const text = msg.toString("ascii");
       const match = text.match(/tcp;(\d+)/i);
       if (match) {
-        resolve(Number(match[1]));
+        const port = Number(match[1]);
+        // Valid user-space port range
+        if (port < 1024 || port > 65535) {
+          reject(new Error(`SQL Browser returned suspicious port ${port}`));
+          return;
+        }
+        resolve(port);
       } else {
         reject(new Error(`Instance "${instance}" not found in SQL Browser response from ${host}`));
       }
@@ -52,7 +65,9 @@ export async function resolveDbUrl(url: string): Promise<string> {
 
   const [full, proto, host, instance] = match;
   const port = await discoverPort(host, instance);
-  console.log(`[sql-browser] ${host}\\${instance} → port ${port}`);
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[sql-browser] ${host}\\${instance} → port ${port}`);
+  }
 
   return url.replace(full, `${proto}${host}:${port}`);
 }
