@@ -10,7 +10,19 @@
       "Bash(node_modules/.bin/next dev *)",
       "Bash(kill %1)",
       "Bash(wait)",
-      "Bash(npx prisma *)"
+      "Bash(npx prisma *)",
+      "Bash(npm run *)",
+      "Bash(Remove-Item -Recurse -Force \"Z:\\\\Develop\\\\CRM\\\\.next\" -ErrorAction SilentlyContinue)",
+      "Bash(Write-Host \"cleared\")",
+      "Bash(curl -sf http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\" http://localhost:3000/)",
+      "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force)",
+      "PowerShell(Set-Location \"Z:\\\\Develop\\\\CRM\"; $env:NODE_ENV=\"development\"; node -e \"const {createServer} = require\\('http'\\); const s = createServer\\(\\(req,res\\)=>{res.end\\('ok'\\)}\\); s.listen\\(3001,\\(\\)=>console.log\\('port 3001 ok'\\)\\)\" 2>&1 | Select-Object -First 5)",
+      "Bash(cmd //c \"dir /a Z:\\\\Develop\\\\CRM\")",
+      "PowerShell(Test-Path \"Z:\\\\Develop\\\\CRM\\\\node_modules\\\\.prisma\\\\client\\\\query_engine-windows.dll.node\" -or \\(Get-ChildItem \"Z:\\\\Develop\\\\CRM\\\\node_modules\\\\.prisma\\\\client\\\\\" -ErrorAction SilentlyContinue | Select-Object -First 3 | Select-Object Name\\))",
+      "PowerShell(Set-Location \"Z:\\\\Develop\\\\CRM\"; npm run dev -- --turbopack 2>&1)",
+      "PowerShell(Set-Location \"Z:\\\\Develop\\\\CRM\"; $outFile = \"C:\\\\Users\\\\itayo\\\\AppData\\\\Local\\\\Temp\\\\crm-dev-server.log\"; Start-Process -FilePath \"cmd.exe\" -ArgumentList \"/c npm run dev -- --turbopack > `\"$outFile`\" 2>&1\" -WorkingDirectory \"Z:\\\\Develop\\\\CRM\" -PassThru | Select-Object Id)"
     ]
   }
 }

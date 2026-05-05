@@ -4,7 +4,7 @@
     {
       "name": "Next.js Dev Server",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["run", "dev", "--", "--turbopack"],
       "port": 3000
     },
     {

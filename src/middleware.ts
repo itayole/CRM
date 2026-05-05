@@ -1,46 +1,11 @@
-import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
-// Routes only accessible by admin role
-const ADMIN_ONLY_PATHS = [
-  "/api/users",
-  "/api/automations",
-  "/api/integrations",
-  "/settings/users",
-  "/settings/automations",
-  "/settings/integrations",
-];
-
-export default withAuth(
-  function middleware(req) {
-    const { pathname } = req.nextUrl;
-    const token = req.nextauth.token;
-
-    if (!token) {
-      return NextResponse.redirect(new URL("/login", req.url));
-    }
-
-    const isAdminRoute = ADMIN_ONLY_PATHS.some((path) =>
-      pathname.startsWith(path)
-    );
-
-    if (isAdminRoute && token.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    return NextResponse.next();
-  },
-  {
-    pages: { signIn: "/login" },
-    callbacks: {
-      authorized: ({ token }) => !!token,
-    },
-  }
-);
+// Mock-login mode: auth state lives in client-side AppContext, not a NextAuth
+// session token, so the middleware just passes every request through.
+export function middleware() {
+  return NextResponse.next();
+}
 
 export const config = {
-  matcher: [
-    // Protect all routes except public ones and the health check
-    "/((?!login|_next/static|_next/image|favicon.ico|api/auth|api/health).*)",
-  ],
+  matcher: [],
 };

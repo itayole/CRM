@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession, Session } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -20,7 +20,7 @@ const UpdateDealSchema = z.object({
 
 async function getDealOrForbid(
   id: number,
-  session: Awaited<ReturnType<typeof getServerSession>>
+  session: Session | null
 ) {
   const deal = await prisma.deal.findUnique({
     where: { id },

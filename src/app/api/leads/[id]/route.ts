@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession, Session } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -18,7 +18,7 @@ const UpdateLeadSchema = z.object({
   activity: z.string().optional(),
 });
 
-async function getLeadOrForbid(id: number, session: Awaited<ReturnType<typeof getServerSession>>) {
+async function getLeadOrForbid(id: number, session: Session | null) {
   const lead = await prisma.lead.findUnique({ where: { id } });
   if (!lead) return null;
   if (session!.user.role !== "admin" && lead.assigneeId !== Number(session!.user.id)) {

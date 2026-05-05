@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession, Session } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -19,7 +19,7 @@ const UpdateClientSchema = z.object({
 
 async function getClientOrForbid(
   id: number,
-  session: Awaited<ReturnType<typeof getServerSession>>
+  session: Session | null
 ) {
   const client = await prisma.client.findUnique({
     where: { id },

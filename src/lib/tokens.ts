@@ -1,0 +1,12 @@
+export const NAVY   = "#0F1B35";
+export const GOLD   = "#C9A84C";
+export const GOLD_L = "#F5EDD3";
+export const BLUE   = "#1E3A6E";
+export const SURF   = "#F7F6F3";
+export const WHITE  = "#FFFFFF";
+export const MUTED  = "#8A9BBE";
+export const TEXT   = "#1A2540";
+export const BORDER = "#E2DDD5";
+export const OK     = "#1E8C5A";
+export const WARN   = "#D48B1A";
+export const ERR    = "#C0392B";
