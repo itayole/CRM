@@ -25,15 +25,15 @@ const NAV = [
 ];
 
 export default function CRMLayout({ children }: { children: React.ReactNode }) {
-  const { currentUser, activeUser, isAdmin, isImpersonating, stopImpersonate, logout } = useApp();
+  const { currentUser, authLoading, activeUser, isAdmin, isImpersonating, stopImpersonate, logout } = useApp();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!currentUser) router.replace("/login");
-  }, [currentUser, router]);
+    if (!authLoading && !currentUser) router.replace("/login");
+  }, [authLoading, currentUser, router]);
 
-  if (!currentUser) return null;
+  if (authLoading || !currentUser) return null;
 
   const visibleNav = NAV.filter(item => !item.adminOnly || isAdmin);
   const currentId = pathname.replace("/", "") || "dashboard";
@@ -82,7 +82,7 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
                 <div style={{ fontSize: 9, color: MUTED }}>{activeUser?.role}</div>
               </div>
             </div>
-            <button onClick={() => { logout(); router.push("/login"); }}
+            <button onClick={() => logout()}
               style={{ width: "100%", padding: "5px 0", background: "transparent", border: `1px solid ${BLUE}`, borderRadius: 6, color: MUTED, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
               התנתקות
             </button>

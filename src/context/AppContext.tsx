@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, ReactNode } from "react";
+import { useSession, signOut } from "next-auth/react";
 import type { Lead, Deal, Contact, Client, ClientContact, Project, Task, CalendarEvent, Automation, User } from "@/lib/types";
 import {
   initLeads, initDeals, initContacts, initClients, initClientContacts,
@@ -9,6 +10,7 @@ import {
 
 interface AppState {
   currentUser: User | null;
+  authLoading: boolean;
   impersonating: User | null;
   activeUser: User | null;
   isAdmin: boolean;
@@ -29,7 +31,6 @@ interface AppState {
   visibleClients: Client[];
   visibleTasks: Task[];
   // Actions
-  login: (user: User) => void;
   logout: () => void;
   startImpersonate: (user: User) => void;
   stopImpersonate: () => void;
@@ -48,8 +49,14 @@ interface AppState {
 const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // Real auth: the logged-in user comes from the NextAuth session.
+  const { data: session, status } = useSession();
+  const authLoading = status === "loading";
+
   const [impersonating, setImpersonating] = useState<User | null>(null);
+
+  // Business data is still mock-backed (the DB tables other than `users` are
+  // empty); these stay until the data layer is wired to the API.
   const [leads, setLeads] = useState<Lead[]>(initLeads);
   const [deals, setDeals] = useState<Deal[]>(initDeals);
   const [contacts, setContacts] = useState<Contact[]>(initContacts);
@@ -61,8 +68,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [autos, setAutos] = useState<Automation[]>(initAutos);
   const [users, setUsers] = useState<User[]>(initUsers);
 
+  const currentUser: User | null = session?.user
+    ? {
+        id: Number(session.user.id),
+        name: session.user.name ?? session.user.email ?? "",
+        email: session.user.email ?? "",
+        role: session.user.role,
+        active: true,
+        joined: "",
+        lastLogin: null,
+      }
+    : null;
+
   const activeUser = impersonating || currentUser;
-  const isAdmin = currentUser?.role === "מנהל מערכת";
+  const isAdmin = currentUser?.role === "admin";
   const isImpersonating = !!impersonating;
 
   const filterByUser = <T extends { assignee?: string }>(items: T[]): T[] => {
@@ -71,14 +90,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return items.filter(item => item.assignee === activeUser.name);
   };
 
-  const login = (user: User) => {
-    setCurrentUser(user);
-    setImpersonating(null);
-  };
-
   const logout = () => {
-    setCurrentUser(null);
     setImpersonating(null);
+    signOut({ callbackUrl: "/login" });
   };
 
   const startImpersonate = (user: User) => setImpersonating(user);
@@ -87,6 +101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       currentUser,
+      authLoading,
       impersonating,
       activeUser,
       isAdmin,
@@ -105,7 +120,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       visibleDeals: filterByUser(deals),
       visibleClients: filterByUser(clients),
       visibleTasks: filterByUser(tasks),
-      login,
       logout,
       startImpersonate,
       stopImpersonate,

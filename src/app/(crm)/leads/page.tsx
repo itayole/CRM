@@ -1,29 +1,47 @@
 "use client";
 
-import { useState } from "react";
-import { useApp } from "@/context/AppContext";
+import { useState, useEffect, useCallback } from "react";
 import { Av, Bdg, Btn, Input, Select, Modal, FormRow, Field } from "@/components/ui";
+import { fetchLeads, createLead, deleteLead } from "@/lib/api";
 import { fmt } from "@/lib/utils";
 import { LEAD_STATUS } from "@/lib/mockData";
-import { NAVY, GOLD, GOLD_L, BLUE, SURF, WHITE, MUTED, TEXT, BORDER, OK, WARN, ERR } from "@/lib/tokens";
+import { NAVY, GOLD_L, BLUE, SURF, WHITE, MUTED, TEXT, BORDER, OK, WARN, ERR } from "@/lib/tokens";
 import type { Lead } from "@/lib/types";
 
 const COLORS = [NAVY, BLUE, "#7C3AED", "#0891B2", "#059669", "#DC2626", "#D97706"];
 const ACT_ICONS: Record<string, string> = { note: "📝", call: "📞", email: "✉", meeting: "🤝", status: "🔄" };
 
 export default function LeadsPage() {
-  const { visibleLeads: leads, setLeads } = useApp();
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState("");
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [selId, setSelId] = useState<number | null>(null);
   const [selCompany, setSelCompany] = useState<string | null>(null);
-  const [editMode, setEditMode] = useState(false);
   const [dupWarning, setDupWarning] = useState<{ msg: string; match: Lead } | null>(null);
 
-  const emptyForm = { name: "", company: "", email: "", phone: "", status: "new", value: "", source: "", assignee: "מיכל כהן", notes: "" };
+  const emptyForm = { name: "", company: "", email: "", phone: "", status: "new", value: "", source: "", notes: "" };
   const [form, setForm] = useState<typeof emptyForm>(emptyForm);
 
+  // ── Live data ─────────────────────────────────────────────────────────────
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setLoadErr("");
+    try {
+      setLeads(await fetchLeads());
+    } catch (e) {
+      setLoadErr(e instanceof Error ? e.message : "טעינת הלידים נכשלה");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  // Client-side pre-check for instant feedback; the server is authoritative (409).
   const checkDuplicate = (f: typeof emptyForm, existing: Lead[]) => {
     const norm = (s = "") => s.trim().toLowerCase().replace(/[-\s]/g, "");
     for (const l of existing) {
@@ -43,21 +61,37 @@ export default function LeadsPage() {
     if (["name", "company", "phone"].includes(key)) setDupWarning(checkDuplicate(updated, leads));
   };
 
-  const save = (force = false) => {
+  const save = async () => {
     if (!form.name || !form.company) { alert("שם וחברה הם שדות חובה"); return; }
-    if (!force && dupWarning) return;
-    setLeads(p => [{ ...form, id: Date.now(), score: Math.floor(Math.random() * 40 + 50), value: parseFloat(form.value) || 0, activity: [] } as Lead, ...p]);
-    setModal(false); setForm(emptyForm); setDupWarning(null);
+    setSaving(true);
+    const res = await createLead({
+      name: form.name,
+      company: form.company,
+      email: form.email || undefined,
+      phone: form.phone || undefined,
+      status: form.status as Lead["status"],
+      value: parseFloat(form.value) || 0,
+      source: form.source || undefined,
+      notes: form.notes || undefined,
+    });
+    setSaving(false);
+    if (res.status === "duplicate") {
+      setDupWarning({ msg: `ליד דומה כבר קיים במערכת: ${res.existing.name} (${res.existing.company})`, match: res.existing });
+      return;
+    }
+    if (res.status === "created") {
+      setModal(false); setForm(emptyForm); setDupWarning(null);
+      reload();
+      return;
+    }
+    alert("שמירת הליד נכשלה");
   };
 
-  const updateLead = (id: number, key: string, val: string) =>
-    setLeads(p => p.map(l => l.id === id ? { ...l, [key]: val } : l));
-
-  const addNote = (id: number, note: string) => {
-    if (!note.trim()) return;
-    setLeads(p => p.map(l => l.id === id
-      ? { ...l, activity: [{ type: "note", text: note, time: "עכשיו", user: "מיכל כהן" }, ...(l.activity || [])] }
-      : l));
+  const remove = async (id: number) => {
+    if (!window.confirm("למחוק ליד זה?")) return;
+    const ok = await deleteLead(id);
+    if (ok) { setSelId(null); reload(); }
+    else alert("מחיקת הליד נכשלה");
   };
 
   const filtered = leads.filter(l =>
@@ -120,8 +154,8 @@ export default function LeadsPage() {
             <Field label="סטטוס">
               <Select value={form.status} onChange={v => setForm(p => ({ ...p, status: v }))} options={[{ value: "new", label: "חדש" }, { value: "contacted", label: "פנייה" }, { value: "qualified", label: "מוסמך" }, { value: "disqualified", label: "נפסל" }]} style={{ width: "100%" }} />
             </Field>
-            <Field label="נציג">
-              <Select value={form.assignee} onChange={v => setForm(p => ({ ...p, assignee: v }))} options={["מיכל כהן", "ירון לוי", "אייל נחמני"].map(x => ({ value: x, label: x }))} style={{ width: "100%" }} />
+            <Field label="נציג אחראי">
+              <Input value="מוקצה אליי אוטומטית" onChange={() => {}} style={{ width: "100%" }} />
             </Field>
           </FormRow>
           <div style={{ marginBottom: 10 }}>
@@ -133,14 +167,13 @@ export default function LeadsPage() {
           <div style={{ display: "flex", gap: 8 }}>
             {dupWarning ? (
               <>
-                <button onClick={() => save(true)} style={{ background: WARN, color: WHITE, border: "none", borderRadius: 7, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>הוסף בכל זאת</button>
                 <button onClick={() => { setSelId(dupWarning.match.id); setSelCompany(dupWarning.match.company); setModal(false); setDupWarning(null); }}
                   style={{ background: WHITE, color: NAVY, border: `1px solid ${NAVY}`, borderRadius: 7, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>פתח ליד קיים</button>
                 <Btn onClick={() => { setModal(false); setDupWarning(null); setForm(emptyForm); }} variant="secondary">ביטול</Btn>
               </>
             ) : (
               <>
-                <Btn onClick={() => save(false)}>✓ שמור ליד</Btn>
+                <Btn onClick={save} disabled={saving}>{saving ? "שומר…" : "✓ שמור ליד"}</Btn>
                 <Btn onClick={() => { setModal(false); setForm(emptyForm); }} variant="secondary">ביטול</Btn>
               </>
             )}
@@ -169,8 +202,14 @@ export default function LeadsPage() {
         </div>
 
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {groups.length === 0 && <div style={{ textAlign: "center", padding: 32, color: MUTED, fontSize: 12 }}>אין לידים תואמים</div>}
-          {groups.map(group => {
+          {loading && <div style={{ textAlign: "center", padding: 32, color: MUTED, fontSize: 12 }}>טוען לידים…</div>}
+          {!loading && loadErr && <div style={{ textAlign: "center", padding: 32, color: ERR, fontSize: 12 }}>⚠ {loadErr} <button onClick={reload} style={{ marginRight: 8, textDecoration: "underline", background: "none", border: "none", color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>נסה שוב</button></div>}
+          {!loading && !loadErr && groups.length === 0 && (
+            <div style={{ textAlign: "center", padding: 32, color: MUTED, fontSize: 12 }}>
+              {leads.length === 0 ? "אין עדיין לידים במערכת — לחצו על «+ ליד חדש» כדי להוסיף" : "אין לידים תואמים"}
+            </div>
+          )}
+          {!loading && !loadErr && groups.map(group => {
             const isExpanded = selCompany === group.company;
             const gs = groupStatus(group.leads);
             const gst = LEAD_STATUS[gs] || LEAD_STATUS.new;
@@ -208,7 +247,7 @@ export default function LeadsPage() {
                       const sc = l.score >= 80 ? OK : l.score >= 60 ? WARN : ERR;
                       const isSel = selId === l.id;
                       return (
-                        <div key={l.id} onClick={e => { e.stopPropagation(); setSelId(isSel ? null : l.id); setEditMode(false); }}
+                        <div key={l.id} onClick={e => { e.stopPropagation(); setSelId(isSel ? null : l.id); }}
                           style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 18px 10px 15px", borderTop: `1px solid ${BORDER}`, background: isSel ? GOLD_L : WHITE, cursor: "pointer" }}>
                           <div style={{ width: 2, height: 32, background: BORDER, borderRadius: 1, marginRight: 4, flexShrink: 0 }} />
                           <Av name={l.name} size={30} color={COLORS[li % COLORS.length]} />
@@ -251,7 +290,7 @@ export default function LeadsPage() {
                 <div style={{ fontSize: 11, color: BLUE, fontWeight: 600 }}>🏢 {sel.company}</div>
               </div>
             </div>
-            <button onClick={() => { setSelId(null); setEditMode(false); }} style={{ background: "none", border: "none", fontSize: 16, cursor: "pointer", color: MUTED }}>✕</button>
+            <button onClick={() => setSelId(null)} style={{ background: "none", border: "none", fontSize: 16, cursor: "pointer", color: MUTED }}>✕</button>
           </div>
           <div style={{ flex: 1, overflowY: "auto" }}>
             <div style={{ padding: "11px 15px", borderBottom: `1px solid ${BORDER}`, display: "flex", gap: 10, alignItems: "center" }}>
@@ -280,7 +319,7 @@ export default function LeadsPage() {
             </div>
             <div style={{ padding: "11px 15px", borderBottom: `1px solid ${BORDER}` }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {[{ label: "שווי", val: fmt(Number(sel.value)) }, { label: "מקור", val: sel.source || "—" }, { label: "נציג", val: sel.assignee }, { label: "נוצר", val: "—" }].map(({ label, val }) => (
+                {[{ label: "שווי", val: fmt(Number(sel.value)) }, { label: "מקור", val: sel.source || "—" }, { label: "נציג", val: sel.assignee || "—" }].map(({ label, val }) => (
                   <div key={label}><div style={{ fontSize: 10, color: MUTED, marginBottom: 2 }}>{label}</div><div style={{ fontSize: 11, fontWeight: 600, color: TEXT }}>{val}</div></div>
                 ))}
               </div>
@@ -291,25 +330,27 @@ export default function LeadsPage() {
                 <div style={{ fontSize: 11, color: TEXT, lineHeight: 1.5 }}>{sel.notes}</div>
               </div>
             )}
-            <div style={{ padding: "11px 15px" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 9 }}>יומן פעילות</div>
-              {[...(sel.activity || []), { type: "email", text: "נשלח מייל היכרות", time: "לפני 3 ימים", user: sel.assignee }, { type: "call", text: "שיחת טלפון — 12 דק׳", time: "לפני 5 ימים", user: sel.assignee }].map((a, i) => (
-                <div key={i} style={{ display: "flex", gap: 7, marginBottom: 8 }}>
-                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: SURF, border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0 }}>
-                    {ACT_ICONS[a.type] || "📌"}
+            {(sel.activity || []).length > 0 && (
+              <div style={{ padding: "11px 15px" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 9 }}>יומן פעילות</div>
+                {(sel.activity || []).map((a, i) => (
+                  <div key={i} style={{ display: "flex", gap: 7, marginBottom: 8 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: "50%", background: SURF, border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0 }}>
+                      {ACT_ICONS[a.type] || "📌"}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: TEXT, fontWeight: 500 }}>{a.text}</div>
+                      <div style={{ fontSize: 10, color: MUTED }}>{a.time} · {a.user}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: TEXT, fontWeight: 500 }}>{a.text}</div>
-                    <div style={{ fontSize: 10, color: MUTED }}>{a.time} · {a.user}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
           <div style={{ padding: "9px 14px", borderTop: `1px solid ${BORDER}`, display: "flex", gap: 5 }}>
             <button style={{ flex: 1, padding: "7px 0", background: NAVY, color: WHITE, border: "none", borderRadius: 7, fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>✉ מייל</button>
             <button style={{ flex: 1, padding: "7px 0", background: WHITE, color: NAVY, border: `1px solid ${NAVY}`, borderRadius: 7, fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>📞 שיחה</button>
-            <button onClick={() => { if (window.confirm("למחוק ליד זה?")) { setLeads(p => p.filter(x => x.id !== sel.id)); setSelId(null); } }}
+            <button onClick={() => remove(sel.id)}
               style={{ padding: "7px 9px", background: WHITE, color: ERR, border: `1px solid ${BORDER}`, borderRadius: 7, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>🗑</button>
           </div>
         </div>
