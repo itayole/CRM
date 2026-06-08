@@ -12,7 +12,7 @@ model User {
   id        Int             @id @default(autoincrement())
   name      String          @db.NVarChar(200)
   email     String          @unique @db.NVarChar(320)
-  password  String          @db.NVarChar(200)
+  password  String?         @db.NVarChar(200)  // null = AD/LDAP-only login (no local password)
   role      String          @db.NVarChar(50)   // "admin" | "sales_rep"
   active    Boolean         @default(true)
   joined    DateTime        @default(now())
