@@ -15,10 +15,13 @@ anything — including deletes — without touching production data.
 The test container runs the **same pre-built image as prod** (`ghcr.io/itayole/salesflow-crm`) — only the env differs. You build & push the image once from a build machine; the QNAP just pulls it.
 
 ## Files
-- `docker-compose.CRM_test.yml` — the test service (pulls the image; no build on the QNAP)
-- `.env.test.example` — env template (copy to `.env.test`, which is gitignored)
-- `make-env.sh` — generates `.env.test` with a fresh secret
+- `docker-compose.CRM_test.yml` — **CLI/SSH** version (uses `env_file: .env.test`)
+- `docker-compose.CRM_test.gui.yml` — **Container Station GUI** version (env inline; paste this one)
+- `.env.test.example` — env template for the CLI version (copy to `.env.test`, gitignored)
+- `make-env.sh` — generates `.env.test` with a fresh secret (CLI version)
 - `README.md` — this file
+
+> Pick ONE deploy method below. QNAP users typically use the **Container Station GUI**.
 
 ---
 
@@ -51,17 +54,27 @@ docker push ghcr.io/itayole/salesflow-crm:latest
 docker push ghcr.io/itayole/salesflow-crm:<version>
 ```
 
-### 3. On the QNAP (only needs this `deploy/test/` folder)
+### 3a. Deploy via Container Station GUI (recommended on QNAP)
+1. Container Station → **Preferences → Registry** → add your **ghcr.io** credentials
+   (GitHub username + a PAT with `read:packages`) — the image is private.
+2. Container Station → **Applications → Create**.
+3. Paste the contents of **`docker-compose.CRM_test.gui.yml`**.
+4. Replace the two placeholders: `<DB_PASSWORD>` and `<NEXTAUTH_SECRET>`
+   (generate a secret with `openssl rand -base64 32`).
+5. Create / Start.
+
+### 3b. Or deploy via SSH/CLI (only needs this folder)
 ```sh
 # create .env.test (gitignored). Pass the salesflow_app DB password:
 sh make-env.sh '<salesflow_app_db_password>'
 #   …or: cp .env.test.example .env.test  and edit the password + NEXTAUTH_SECRET
 
+docker login ghcr.io                              # private image
 docker compose -f docker-compose.CRM_test.yml pull
 docker compose -f docker-compose.CRM_test.yml up -d
 ```
 
-Testers then use **http://192.168.1.197:3001**.
+Either way, testers then use **http://192.168.1.197:3001**.
 
 ---
 

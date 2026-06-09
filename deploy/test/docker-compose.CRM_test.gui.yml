@@ -1,0 +1,36 @@
+# ── CRM_test — Container Station (GUI) version ───────────────────────────────
+# Paste this into Container Station → Applications → Create.
+# Env is INLINE (no .env.test needed). Before deploying, replace the two
+# <PLACEHOLDER> values:
+#   <DB_PASSWORD>      — the salesflow_app SQL password (from your prod config/vault)
+#   <NEXTAUTH_SECRET>  — a fresh random string (e.g. `openssl rand -base64 32`)
+#
+# NOTE: DATABASE_URL uses a DOUBLE backslash (\\) before the instance — YAML
+# collapses it to a single backslash at runtime (same as the prod compose).
+#
+# The image is PRIVATE on ghcr.io — add your GitHub registry credentials in
+# Container Station (Preferences → Registry) first, or it can't pull.
+services:
+  crm-test:
+    image: ghcr.io/itayole/salesflow-crm:latest   # confirm/adjust to your image name + tag
+    container_name: CRM_test
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "sqlserver://172.28.10.2\\MFILES_SQL;database=SalesFlowCRM_test;user=salesflow_app;password=<DB_PASSWORD>;encrypt=true;trustServerCertificate=true"
+      NEXTAUTH_SECRET: "<NEXTAUTH_SECRET>"
+      NEXTAUTH_URL: "http://192.168.1.197:3001"
+      LDAP_URL: "ldap://172.28.10.1:389"
+      LDAP_UPN_SUFFIX: "shiluv.co.il"
+      LDAP_NETBIOS: "SHILUV"
+      LDAP_BIND_MODE: "upn"
+      LDAP_TLS_REJECT_UNAUTHORIZED: "true"
+      LDAP_AUTO_PROVISION: "false"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
