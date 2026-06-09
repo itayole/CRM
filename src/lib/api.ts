@@ -97,6 +97,54 @@ export async function fetchStats(): Promise<DashboardStats> {
   return (await jsonOrThrow(res)) as DashboardStats;
 }
 
+// ── Tasks ────────────────────────────────────────────────────────────────────
+export interface CrmTask {
+  id: number; desc: string; type: string; priority: "high" | "medium" | "low";
+  date: string; time: string | null; client: string | null; notes: string | null;
+  status: "open" | "done"; assignee: Named | null;
+}
+interface ApiTask {
+  id: number; desc: string; type: string; priority: "high" | "medium" | "low";
+  date: string; time: string | null; client: string | null; notes: string | null;
+  status: "open" | "done"; assignee: Named | null;
+}
+const toUITask = (t: ApiTask): CrmTask => ({
+  id: t.id, desc: t.desc, type: t.type, priority: t.priority,
+  date: t.date ? String(t.date).slice(0, 10) : "", time: t.time, client: t.client,
+  notes: t.notes, status: t.status, assignee: t.assignee ?? null,
+});
+export interface TaskInput {
+  desc: string; type?: string; priority?: "high" | "medium" | "low";
+  date: string; time?: string | null; client?: string | null; notes?: string | null;
+  status?: "open" | "done"; assigneeId?: number;
+}
+export async function fetchTasks(params: { status?: string; q?: string } = {}): Promise<CrmTask[]> {
+  const qs = new URLSearchParams();
+  if (params.status && params.status !== "all") qs.set("status", params.status);
+  if (params.q) qs.set("q", params.q);
+  const res = await fetch(`/api/tasks?${qs}`, { cache: "no-store" });
+  const body = (await jsonOrThrow(res)) as { data: ApiTask[] };
+  return (body.data ?? []).map(toUITask);
+}
+export async function createTask(input: TaskInput): Promise<{ ok: boolean; task?: CrmTask; message?: string }> {
+  const res = await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true, task: toUITask((await res.json()) as ApiTask) };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת המשימה נכשלה" };
+}
+export async function updateTask(id: number, patch: Partial<TaskInput>): Promise<{ ok: boolean; task?: CrmTask; message?: string }> {
+  const res = await fetch(`/api/tasks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  if (res.ok) return { ok: true, task: toUITask((await res.json()) as ApiTask) };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "עדכון המשימה נכשל" };
+}
+export async function deleteTask(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת המשימה נכשלה" };
+}
+
 // ── Sales analytics (deal-centric) ──────────────────────────────────────────
 export interface SalesAnalytics {
   kpis: {
