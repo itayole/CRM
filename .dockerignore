@@ -11,3 +11,4 @@ README.md
 DB import/
 *.xlsx
 docker-compose*.yml
+deploy/

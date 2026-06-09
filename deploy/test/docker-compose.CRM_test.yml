@@ -3,18 +3,12 @@
 # (salesflow-crm, :3000). Points at the SalesFlowCRM_test database copy, so
 # destructive testing never touches production data.
 #
-# Deploy on the QNAP (in the repo directory, same place prod is built):
-#   1) git fetch && git checkout feat/pre-test-improvements   (or the merged branch)
-#   2) cp .env.test.example .env.test   then fill in the secrets   (.env.test is gitignored)
-#   3) docker compose -f docker-compose.CRM_test.yml up -d --build
-#
-# Manage:
-#   docker compose -f docker-compose.CRM_test.yml logs -f
-#   docker compose -f docker-compose.CRM_test.yml down
+# build context is the repo root (../..) — run from a full checkout on the QNAP.
+# See README.md in this directory for the full runbook.
 services:
   crm-test:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
     container_name: CRM_test
     restart: unless-stopped
