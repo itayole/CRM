@@ -33,7 +33,6 @@ function ProjectsTab() {
   if (err) return <div style={{ color: ERR, fontSize: 12 }}>⚠ {err}</div>;
   if (!a) return <div style={{ color: MUTED, fontSize: 12 }}>טוען נתונים…</div>;
 
-  const k = a.kpis;
   const methodologyData = a.byMethodology.map(m => ({ name: m.name, value: m.billing }));
   const managerData = a.byManager.map(m => ({ name: m.name, value: m.billing }));
   const maxClient = Math.max(1, ...a.byClient.map(c => c.billing));
@@ -42,11 +41,12 @@ function ProjectsTab() {
   return (
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 16 }}>
-        <Stat label="חיוב מצטבר" value={fmt(k.totalBilling)} color={NAVY} />
-        <Stat label="פרויקטים" value={k.totalProjects.toLocaleString()} sub={`${k.withBilling.toLocaleString()} עם חיוב`} color={BLUE} />
-        <Stat label="חיוב ממוצע לפרויקט" value={fmt(k.avgBilling)} sub="מתוך פרויקטים עם חיוב" color={GOLD} />
-        <Stat label="לקוחות מובילים" value={a.byClient.length} sub="לפי חיוב (מוצגים)" color={OK} />
+        <Stat label="הכנסות ממומשות" value={fmt(a.won.billing)} sub={`${a.won.count.toLocaleString()} פרויקטים פעילים/מאושרים`} color={OK} />
+        <Stat label="Pipeline פתוח" value={fmt(a.open.billing)} sub={`${a.open.count.toLocaleString()} בהצעה/ממתינים`} color={NAVY} />
+        <Stat label="שיעור זכייה" value={`${a.winRate}%`} sub={`אבדו: ${fmt(a.lost.billing)} (${a.lost.count.toLocaleString()})`} color={BLUE} />
+        <Stat label="עסקה ממוצעת (ממומש)" value={fmt(a.avgWon)} sub={`מתוך ${a.totals.projects.toLocaleString()} פרויקטים`} color={GOLD} />
       </div>
+      <div style={{ fontSize: 11, color: MUTED, marginBottom: 12 }}>הפילוחים שלהלן משקפים הכנסות ממומשות (פרויקטים בעבודה / שאושרו).</div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <Card style={{ padding: 14 }}>

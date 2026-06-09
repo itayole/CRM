@@ -271,13 +271,19 @@ export async function fetchAnalytics(params: { pipelineId?: number } = {}): Prom
 }
 
 // Project / billing analytics (research-firm view).
+interface BillingGroup { name: string; count: number; billing: number }
 export interface ProjectAnalytics {
-  kpis: { totalProjects: number; totalBilling: number; withBilling: number; avgBilling: number };
-  byMethodology: { name: string; count: number; billing: number }[];
-  byManager: { name: string; count: number; billing: number }[];
-  byClient: { name: string; count: number; billing: number }[];
-  byStatus: { name: string; count: number }[];
-  byResearchType: { name: string; count: number; billing: number }[];
+  totals: { projects: number; quotedBilling: number };
+  won: { count: number; billing: number };
+  open: { count: number; billing: number };
+  lost: { count: number; billing: number };
+  winRate: number;
+  avgWon: number;
+  byMethodology: BillingGroup[];
+  byManager: BillingGroup[];
+  byClient: BillingGroup[];
+  byStatus: BillingGroup[];
+  byResearchType: BillingGroup[];
 }
 export async function fetchProjectAnalytics(): Promise<ProjectAnalytics> {
   const res = await fetch("/api/analytics/projects", { cache: "no-store" });
