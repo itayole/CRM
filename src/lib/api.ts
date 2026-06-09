@@ -253,6 +253,40 @@ export interface ProjectPatch {
 }
 export const updateProject = (id: number, patch: ProjectPatch) => patchOk(`/api/projects/${id}`, patch);
 
+// ── Contacts ────────────────────────────────────────────────────────────────
+export interface CrmContactRow {
+  id: number; fullName: string | null; firstName: string | null; email: string | null; mobile: string | null;
+  companyName: string | null; category: string | null; status: string | null; newsletter: boolean;
+  client: Named | null; accountManager: Named | null;
+}
+export interface ContactInput {
+  fullName: string; firstName?: string | null; email?: string | null; mobile?: string | null;
+  companyName?: string | null; category?: string | null; newsletter?: boolean; status?: string | null;
+  clientId?: number | null; accountManagerId?: number | null;
+}
+export async function fetchContacts(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmContactRow>> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  qs.set("page", String(params.page ?? 1));
+  qs.set("limit", String(params.limit ?? 60));
+  const res = await fetch(`/api/contacts?${qs}`, { cache: "no-store" });
+  const body = (await jsonOrThrow(res)) as Page<CrmContactRow>;
+  return body;
+}
+export async function createContact(input: ContactInput): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/contacts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת איש הקשר נכשלה" };
+}
+export const updateContact = (id: number, patch: Partial<ContactInput>) => patchOk(`/api/contacts/${id}`, patch);
+export async function deleteContact(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/contacts/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת איש הקשר נכשלה" };
+}
+
 /** Active users for assignee dropdowns (admin-only endpoint; returns [] if forbidden). */
 export async function fetchActiveUsers(): Promise<Named[]> {
   try {
