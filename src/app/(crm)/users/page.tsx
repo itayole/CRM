@@ -18,6 +18,9 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState("");
   const [form, setForm] = useState(emptyForm);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState(emptyForm);
+  const [editErr, setEditErr] = useState("");
 
   const reload = useCallback(async () => {
     setLoading(true); setLoadErr("");
@@ -63,6 +66,29 @@ export default function UsersPage() {
     reload();
   };
 
+  const openEdit = (u: CrmUser) => {
+    setEditId(u.id);
+    setEditForm({ name: u.name, email: u.email, role: u.role === "admin" ? "admin" : "sales_rep", active: u.active, password: "" });
+    setEditErr("");
+  };
+  const closeEdit = () => { setEditId(null); setEditErr(""); };
+
+  const saveEdit = async () => {
+    if (!editForm.name || !editForm.email) { setEditErr("שם ומייל הם שדות חובה"); return; }
+    if (editForm.password && editForm.password.length < 6) { setEditErr("סיסמה חייבת להיות באורך 6 תווים לפחות"); return; }
+    setSaving(true); setEditErr("");
+    const isSelf = editId === currentUser?.id;
+    const patch: Partial<{ name: string; email: string; role: "admin" | "sales_rep"; active: boolean; password: string }> = {
+      name: editForm.name, email: editForm.email,
+    };
+    if (!isSelf) { patch.role = editForm.role; patch.active = editForm.active; }
+    if (editForm.password) patch.password = editForm.password;
+    const res = await updateUser(editId!, patch);
+    setSaving(false);
+    if (!res.ok) { setEditErr(res.message ?? "עדכון נכשל"); return; }
+    closeEdit(); reload();
+  };
+
   const adminCount = users.filter(u => isAdminRole(u.role)).length;
 
   return (
@@ -91,6 +117,37 @@ export default function UsersPage() {
           <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
             <Btn onClick={save} disabled={saving}>{saving ? "שומר…" : "✓ הוסף"}</Btn>
             <Btn onClick={() => { setModal(false); setForm(emptyForm); setFormErr(""); }} variant="secondary">ביטול</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {editId !== null && (
+        <Modal title="✎ עריכת משתמש" onClose={closeEdit}>
+          <FormRow>
+            <Field label="שם מלא *"><Input value={editForm.name} onChange={v => setEditForm(p => ({ ...p, name: v }))} placeholder="ישראל ישראלי" style={{ width: "100%" }} /></Field>
+            <Field label="מייל / שם משתמש *"><Input value={editForm.email} onChange={v => setEditForm(p => ({ ...p, email: v }))} placeholder="user@shiluv.co.il" style={{ width: "100%" }} /></Field>
+          </FormRow>
+          {editId !== currentUser?.id ? (
+            <FormRow>
+              <Field label="תפקיד">
+                <Select value={editForm.role} onChange={v => setEditForm(p => ({ ...p, role: v as "admin" | "sales_rep" }))} options={ROLES.map(r => ({ value: r.value, label: r.label }))} style={{ width: "100%" }} />
+              </Field>
+              <Field label="סטטוס">
+                <Select value={editForm.active ? "true" : "false"} onChange={v => setEditForm(p => ({ ...p, active: v === "true" }))} options={[{ value: "true", label: "פעיל" }, { value: "false", label: "לא פעיל" }]} style={{ width: "100%" }} />
+              </Field>
+            </FormRow>
+          ) : (
+            <div style={{ fontSize: 10, color: MUTED, marginBottom: 10 }}>אינך יכול לשנות את התפקיד / הסטטוס של עצמך.</div>
+          )}
+          <div style={{ marginBottom: 10 }}>
+            <Field label="איפוס סיסמה מקומית (אופציונלי)">
+              <Input value={editForm.password} onChange={v => setEditForm(p => ({ ...p, password: v }))} placeholder="השאירו ריק כדי לא לשנות" type="password" style={{ width: "100%" }} />
+            </Field>
+          </div>
+          {editErr && <div style={{ fontSize: 12, color: ERR, marginBottom: 10 }}>{editErr}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <Btn onClick={saveEdit} disabled={saving}>{saving ? "שומר…" : "✓ שמור"}</Btn>
+            <Btn onClick={closeEdit} variant="secondary">ביטול</Btn>
           </div>
         </Modal>
       )}
@@ -151,6 +208,8 @@ export default function UsersPage() {
                     </td>
                     <td style={{ padding: "9px 12px" }}>
                       <div style={{ display: "flex", gap: 5 }}>
+                        <button onClick={() => openEdit(u)}
+                          style={{ fontSize: 10, padding: "3px 7px", border: `1px solid ${BORDER}`, borderRadius: 5, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך</button>
                         {!isSelf && (
                           <button onClick={() => toggleActive(u)}
                             style={{ fontSize: 10, padding: "3px 7px", border: `1px solid ${BORDER}`, borderRadius: 5, background: WHITE, cursor: "pointer", color: u.active ? WARN : OK, fontFamily: "inherit" }}>
@@ -161,7 +220,6 @@ export default function UsersPage() {
                           <button onClick={() => remove(u)}
                             style={{ fontSize: 10, padding: "3px 7px", border: `1px solid ${BORDER}`, borderRadius: 5, background: WHITE, cursor: "pointer", color: ERR, fontFamily: "inherit" }}>🗑</button>
                         )}
-                        {isSelf && <span style={{ fontSize: 10, color: MUTED }}>—</span>}
                       </div>
                     </td>
                   </tr>
