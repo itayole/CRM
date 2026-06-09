@@ -46,7 +46,7 @@ export default function AnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: MUTED }} />
                 <YAxis tick={{ fontSize: 10, fill: MUTED }} tickFormatter={(v: number) => "₪" + v / 1000 + "K"} />
-                <Tooltip formatter={(v: number) => fmt(v)} />
+                <Tooltip formatter={(v) => fmt(Number(v))} />
                 <Bar dataKey="revenue" fill={NAVY} radius={[4, 4, 0, 0]} name="הכנסות" />
               </BarChart>
             </ResponsiveContainer>
