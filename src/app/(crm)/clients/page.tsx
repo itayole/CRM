@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Av, Stat, Input } from "@/components/ui";
-import { fetchClients, type CrmClientRow } from "@/lib/api";
-import { NAVY, GOLD, GOLD_L, WHITE, MUTED, TEXT, BORDER, OK, SURF } from "@/lib/tokens";
+import { Av, Stat, Input, Btn, Select, Modal, FormRow, Field } from "@/components/ui";
+import { fetchClients, updateClient, fetchActiveUsers, type CrmClientRow } from "@/lib/api";
+import { NAVY, GOLD, GOLD_L, WHITE, MUTED, TEXT, BORDER, OK, ERR, SURF } from "@/lib/tokens";
+
+type Named = { id: number; name: string };
+const emptyEdit = { name: "", industry: "", email: "", phone: "", address: "", website: "", status: "", assigneeId: "", notes: "" };
 
 export default function ClientsPage() {
   const [rows, setRows] = useState<CrmClientRow[]>([]);
@@ -13,6 +16,11 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [selected, setSelected] = useState<CrmClientRow | null>(null);
+  const [users, setUsers] = useState<Named[]>([]);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState(emptyEdit);
+  const [editErr, setEditErr] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async (p: number, query: string, append: boolean) => {
     setLoading(true); setErr("");
@@ -27,7 +35,7 @@ export default function ClientsPage() {
     }
   }, []);
 
-  // initial load + debounced search
+  useEffect(() => { fetchActiveUsers().then(setUsers); }, []);
   useEffect(() => {
     const t = setTimeout(() => load(1, q, false), q ? 300 : 0);
     return () => clearTimeout(t);
@@ -35,8 +43,72 @@ export default function ClientsPage() {
 
   const canLoadMore = rows.length < total;
 
+  const openEdit = (c: CrmClientRow) => {
+    setEditId(c.id);
+    setEditForm({
+      name: c.name, industry: c.industry ?? "", email: c.email ?? "", phone: c.phone ?? "",
+      address: "", website: "", status: c.status ?? "", assigneeId: c.assignee ? String(c.assignee.id) : "", notes: "",
+    });
+    setEditErr("");
+  };
+
+  const saveEdit = async () => {
+    if (!editForm.name) { setEditErr("שם הוא שדה חובה"); return; }
+    setSaving(true); setEditErr("");
+    const res = await updateClient(editId!, {
+      name: editForm.name,
+      industry: editForm.industry || null,
+      email: editForm.email || null,
+      phone: editForm.phone || null,
+      address: editForm.address || null,
+      website: editForm.website || null,
+      ...(editForm.status === "active" || editForm.status === "prospect" ? { status: editForm.status } : {}),
+      ...(editForm.assigneeId ? { assigneeId: Number(editForm.assigneeId) } : {}),
+      notes: editForm.notes || null,
+    });
+    setSaving(false);
+    if (!res.ok) { setEditErr(res.message ?? "העדכון נכשל"); return; }
+    setEditId(null);
+    load(1, q, false);
+  };
+
   return (
     <div style={{ padding: "16px 20px", display: "flex", gap: 14, height: "100%", overflow: "hidden" }}>
+      {editId !== null && (
+        <Modal title="✎ עריכת לקוח" onClose={() => setEditId(null)} width={560}>
+          <FormRow>
+            <Field label="שם חברה *"><Input value={editForm.name} onChange={v => setEditForm(p => ({ ...p, name: v }))} style={{ width: "100%" }} /></Field>
+            <Field label="תעשייה"><Input value={editForm.industry} onChange={v => setEditForm(p => ({ ...p, industry: v }))} style={{ width: "100%" }} /></Field>
+          </FormRow>
+          <FormRow>
+            <Field label="מייל"><Input value={editForm.email} onChange={v => setEditForm(p => ({ ...p, email: v }))} style={{ width: "100%" }} /></Field>
+            <Field label="טלפון"><Input value={editForm.phone} onChange={v => setEditForm(p => ({ ...p, phone: v }))} style={{ width: "100%" }} /></Field>
+          </FormRow>
+          <FormRow>
+            <Field label="כתובת"><Input value={editForm.address} onChange={v => setEditForm(p => ({ ...p, address: v }))} style={{ width: "100%" }} /></Field>
+            <Field label="אתר"><Input value={editForm.website} onChange={v => setEditForm(p => ({ ...p, website: v }))} style={{ width: "100%" }} /></Field>
+          </FormRow>
+          <FormRow>
+            <Field label="סטטוס">
+              <Select value={editForm.status} onChange={v => setEditForm(p => ({ ...p, status: v }))} options={[{ value: "", label: "— ללא —" }, { value: "active", label: "פעיל" }, { value: "prospect", label: "מתעניין" }]} style={{ width: "100%" }} />
+            </Field>
+            <Field label="מנהל לקוח">
+              <Select value={editForm.assigneeId} onChange={v => setEditForm(p => ({ ...p, assigneeId: v }))} options={[{ value: "", label: "— ללא —" }, ...users.map(u => ({ value: String(u.id), label: u.name }))]} style={{ width: "100%" }} />
+            </Field>
+          </FormRow>
+          <div style={{ marginBottom: 10 }}>
+            <Field label="הערות">
+              <textarea value={editForm.notes} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} style={{ width: "100%", padding: "8px 11px", border: `1px solid ${BORDER}`, borderRadius: 7, fontSize: 12, resize: "vertical", minHeight: 50, outline: "none", fontFamily: "inherit" }} />
+            </Field>
+          </div>
+          {editErr && <div style={{ fontSize: 12, color: ERR, marginBottom: 10 }}>{editErr}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn onClick={saveEdit} disabled={saving}>{saving ? "שומר…" : "✓ שמור"}</Btn>
+            <Btn onClick={() => setEditId(null)} variant="secondary">ביטול</Btn>
+          </div>
+        </Modal>
+      )}
+
       <div style={{ flex: 1, overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div>
@@ -53,16 +125,18 @@ export default function ClientsPage() {
 
         <Input value={q} onChange={setQ} placeholder="🔍 חיפוש לקוח לפי שם / תעשייה / מייל..." style={{ width: "100%", marginBottom: 12 }} />
 
-        {err && <div style={{ textAlign: "center", padding: 24, color: "#C0392B", fontSize: 12 }}>⚠ {err} <button onClick={() => load(1, q, false)} style={{ marginRight: 8, textDecoration: "underline", background: "none", border: "none", color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>נסה שוב</button></div>}
+        {err && <div style={{ textAlign: "center", padding: 24, color: ERR, fontSize: 12 }}>⚠ {err} <button onClick={() => load(1, q, false)} style={{ marginRight: 8, textDecoration: "underline", background: "none", border: "none", color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>נסה שוב</button></div>}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 10 }}>
           {rows.map(c => (
             <div key={c.id} onClick={() => setSelected(selected?.id === c.id ? null : c)}
-              style={{ background: selected?.id === c.id ? GOLD_L : WHITE, border: `1px solid ${selected?.id === c.id ? GOLD : BORDER}`, borderRadius: 10, padding: 14, cursor: "pointer" }}>
+              style={{ background: selected?.id === c.id ? GOLD_L : WHITE, border: `1px solid ${selected?.id === c.id ? GOLD : BORDER}`, borderRadius: 10, padding: 14, cursor: "pointer", position: "relative" }}>
+              <button onClick={e => { e.stopPropagation(); openEdit(c); }}
+                style={{ position: "absolute", top: 10, left: 10, fontSize: 10, padding: "3px 7px", border: `1px solid ${BORDER}`, borderRadius: 5, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך</button>
               <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
                 <Av name={c.name} size={38} color={NAVY} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 13, color: TEXT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</div>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: TEXT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 150 }}>{c.name}</div>
                   <div style={{ fontSize: 11, color: MUTED }}>{c.industry || "—"}{c.assignee ? ` · ${c.assignee.name}` : ""}</div>
                 </div>
               </div>
@@ -92,6 +166,7 @@ export default function ClientsPage() {
             <Av name={selected.name} size={48} color={NAVY} />
             <div style={{ fontWeight: 800, fontSize: 14, color: TEXT, marginTop: 8 }}>{selected.name}</div>
             <div style={{ fontSize: 11, color: MUTED }}>{selected.industry || "—"}</div>
+            <button onClick={() => openEdit(selected)} style={{ marginTop: 8, fontSize: 11, padding: "4px 12px", border: `1px solid ${BORDER}`, borderRadius: 6, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך פרטים</button>
           </div>
           <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 8 }}>פרטים</div>
@@ -101,7 +176,7 @@ export default function ClientsPage() {
           </div>
           <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
             {[["פרויקטים", selected.projectCount], ["אנשי קשר", selected.contactCount], ["עסקאות", selected.dealCount]].map(([l, v]) => (
-              <div key={l} style={{ background: SURF, borderRadius: 6, padding: "8px 0", textAlign: "center" }}>
+              <div key={l as string} style={{ background: SURF, borderRadius: 6, padding: "8px 0", textAlign: "center" }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>{v as number}</div>
                 <div style={{ fontSize: 9, color: MUTED }}>{l as string}</div>
               </div>

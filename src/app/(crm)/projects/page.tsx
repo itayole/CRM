@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Stat, Input } from "@/components/ui";
-import { fetchProjects, type CrmProjectRow } from "@/lib/api";
+import { Stat, Input, Btn, Select, Modal, FormRow, Field } from "@/components/ui";
+import { fetchProjects, updateProject, fetchActiveUsers, type CrmProjectRow } from "@/lib/api";
 import { fmt } from "@/lib/utils";
 import { NAVY, GOLD, WHITE, MUTED, TEXT, BORDER, OK, SURF, ERR } from "@/lib/tokens";
 
+type Named = { id: number; name: string };
 const d10 = (s: string | null) => (s ? String(s).slice(0, 10) : "—");
+const emptyEdit = { name: "", statusText: "", methodology: "", model: "", billing: "", assigneeId: "" };
 
 export default function ProjectsPage() {
   const [rows, setRows] = useState<CrmProjectRow[]>([]);
@@ -16,6 +18,11 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [sel, setSel] = useState<CrmProjectRow | null>(null);
+  const [users, setUsers] = useState<Named[]>([]);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState(emptyEdit);
+  const [editErr, setEditErr] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async (p: number, query: string, append: boolean) => {
     setLoading(true); setErr("");
@@ -30,6 +37,7 @@ export default function ProjectsPage() {
     }
   }, []);
 
+  useEffect(() => { fetchActiveUsers().then(setUsers); }, []);
   useEffect(() => {
     const t = setTimeout(() => load(1, q, false), q ? 300 : 0);
     return () => clearTimeout(t);
@@ -38,8 +46,60 @@ export default function ProjectsPage() {
   const canLoadMore = rows.length < total;
   const billingShown = rows.reduce((s, p) => s + (p.billing ?? 0), 0);
 
+  const openEdit = (p: CrmProjectRow) => {
+    setEditId(p.id);
+    setEditForm({
+      name: p.name, statusText: p.statusText ?? "", methodology: p.methodology ?? "",
+      model: p.model ?? "", billing: p.billing != null ? String(p.billing) : "", assigneeId: p.assignee ? String(p.assignee.id) : "",
+    });
+    setEditErr("");
+  };
+
+  const saveEdit = async () => {
+    if (!editForm.name) { setEditErr("שם פרויקט הוא שדה חובה"); return; }
+    setSaving(true); setEditErr("");
+    const res = await updateProject(editId!, {
+      name: editForm.name,
+      statusText: editForm.statusText || null,
+      methodology: editForm.methodology || null,
+      model: editForm.model || null,
+      billing: editForm.billing ? Number(editForm.billing) : null,
+      assigneeId: editForm.assigneeId ? Number(editForm.assigneeId) : null,
+    });
+    setSaving(false);
+    if (!res.ok) { setEditErr(res.message ?? "העדכון נכשל"); return; }
+    setEditId(null); setSel(null);
+    load(1, q, false);
+  };
+
   return (
     <div style={{ padding: "16px 20px", display: "flex", gap: 14, height: "100%", overflow: "hidden" }}>
+      {editId !== null && (
+        <Modal title="✎ עריכת פרויקט" onClose={() => setEditId(null)} width={560}>
+          <div style={{ marginBottom: 10 }}>
+            <Field label="שם פרויקט *"><Input value={editForm.name} onChange={v => setEditForm(p => ({ ...p, name: v }))} style={{ width: "100%" }} /></Field>
+          </div>
+          <FormRow>
+            <Field label="סטטוס"><Input value={editForm.statusText} onChange={v => setEditForm(p => ({ ...p, statusText: v }))} placeholder="בעבודה / ממתין לאישור..." style={{ width: "100%" }} /></Field>
+            <Field label="מתודולוגיה"><Input value={editForm.methodology} onChange={v => setEditForm(p => ({ ...p, methodology: v }))} placeholder="כמותי / איכותני" style={{ width: "100%" }} /></Field>
+          </FormRow>
+          <FormRow>
+            <Field label="מודל"><Input value={editForm.model} onChange={v => setEditForm(p => ({ ...p, model: v }))} style={{ width: "100%" }} /></Field>
+            <Field label="חיוב (₪)"><Input value={editForm.billing} onChange={v => setEditForm(p => ({ ...p, billing: v }))} type="number" style={{ width: "100%" }} /></Field>
+          </FormRow>
+          <div style={{ marginBottom: 10 }}>
+            <Field label="מנהל לקוח / אחראי">
+              <Select value={editForm.assigneeId} onChange={v => setEditForm(p => ({ ...p, assigneeId: v }))} options={[{ value: "", label: "— ללא —" }, ...users.map(u => ({ value: String(u.id), label: u.name }))]} style={{ width: "100%" }} />
+            </Field>
+          </div>
+          {editErr && <div style={{ fontSize: 12, color: ERR, marginBottom: 10 }}>{editErr}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn onClick={saveEdit} disabled={saving}>{saving ? "שומר…" : "✓ שמור"}</Btn>
+            <Btn onClick={() => setEditId(null)} variant="secondary">ביטול</Btn>
+          </div>
+        </Modal>
+      )}
+
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div>
@@ -74,9 +134,7 @@ export default function ProjectsPage() {
                   <td style={{ padding: "8px 12px", color: MUTED, whiteSpace: "nowrap" }}>{p.projectNo ?? "—"}</td>
                   <td style={{ padding: "8px 12px", fontWeight: 600, color: TEXT, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</td>
                   <td style={{ padding: "8px 12px", color: TEXT }}>
-                    {p.client
-                      ? p.client.name
-                      : <span style={{ color: MUTED }}>{p.clientName || "—"}{p.clientName ? " ⚠" : ""}</span>}
+                    {p.client ? p.client.name : <span style={{ color: MUTED }}>{p.clientName || "—"}{p.clientName ? " ⚠" : ""}</span>}
                   </td>
                   <td style={{ padding: "8px 12px", color: MUTED, whiteSpace: "nowrap" }}>{p.methodology || "—"}</td>
                   <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>{p.statusText || p.state || "—"}</td>
@@ -104,6 +162,7 @@ export default function ProjectsPage() {
             <div style={{ fontWeight: 800, fontSize: 13, color: TEXT }}>{sel.name}</div>
             <button onClick={() => setSel(null)} style={{ background: "none", border: "none", fontSize: 16, cursor: "pointer", color: MUTED }}>✕</button>
           </div>
+          <button onClick={() => openEdit(sel)} style={{ width: "100%", marginBottom: 10, fontSize: 11, padding: "6px 0", border: `1px solid ${NAVY}`, borderRadius: 6, background: WHITE, cursor: "pointer", color: NAVY, fontWeight: 700, fontFamily: "inherit" }}>✎ ערוך פרטים</button>
           {[
             ["מספר פרויקט", sel.projectNo ?? "—"],
             ["לקוח", sel.client?.name || sel.clientName || "—"],

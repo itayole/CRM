@@ -213,3 +213,32 @@ export async function fetchProjects(params: { q?: string; page?: number; limit?:
   const body = (await jsonOrThrow(res)) as Page<ApiProject>;
   return { ...body, data: (body.data ?? []).map(toUIProject) };
 }
+
+async function patchOk(url: string, patch: unknown): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  if (res.ok) return { ok: true };
+  const body = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof body?.error === "string" ? body.error : "העדכון נכשל" };
+}
+
+export interface ClientPatch {
+  name?: string; industry?: string | null; email?: string | null; phone?: string | null;
+  address?: string | null; website?: string | null; status?: "active" | "prospect"; notes?: string | null; assigneeId?: number;
+}
+export const updateClient = (id: number, patch: ClientPatch) => patchOk(`/api/clients/${id}`, patch);
+
+export interface ProjectPatch {
+  name?: string; clientId?: number | null; assigneeId?: number | null;
+  model?: string | null; methodology?: string | null; state?: string | null; statusText?: string | null; billing?: number | null;
+}
+export const updateProject = (id: number, patch: ProjectPatch) => patchOk(`/api/projects/${id}`, patch);
+
+/** Active users for assignee dropdowns (admin-only endpoint; returns [] if forbidden). */
+export async function fetchActiveUsers(): Promise<Named[]> {
+  try {
+    const us = await fetchUsers();
+    return us.filter(u => u.active).map(u => ({ id: u.id, name: u.name }));
+  } catch {
+    return [];
+  }
+}
