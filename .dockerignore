@@ -3,6 +3,11 @@ node_modules
 .git
 .env
 .env.local
+.env.*
 .claude
 CHANGELOG.md
 README.md
+# never bake secrets or PII data into the image
+DB import/
+*.xlsx
+docker-compose*.yml
