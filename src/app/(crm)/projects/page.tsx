@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Stat, Input, Btn, Select, Modal, FormRow, Field } from "@/components/ui";
-import { fetchProjects, updateProject, createProject, fetchClients, fetchActiveUsers, type CrmProjectRow } from "@/lib/api";
+import { fetchProjects, updateProject, createProject, deleteProject, fetchClients, fetchActiveUsers, type CrmProjectRow } from "@/lib/api";
+import { useApp } from "@/context/AppContext";
 import { fmt } from "@/lib/utils";
 import { NAVY, GOLD, WHITE, MUTED, TEXT, BORDER, OK, SURF, ERR } from "@/lib/tokens";
 
@@ -11,6 +12,7 @@ const d10 = (s: string | null) => (s ? String(s).slice(0, 10) : "—");
 const emptyEdit = { name: "", statusText: "", methodology: "", model: "", billing: "", assigneeId: "", clientId: "", clientName: "" };
 
 export default function ProjectsPage() {
+  const { isAdmin } = useApp();
   const [rows, setRows] = useState<CrmProjectRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -78,6 +80,14 @@ export default function ProjectsPage() {
   };
 
   const closeModal = () => { setEditId(null); setCreating(false); };
+
+  const remove = async (p: CrmProjectRow) => {
+    if (!window.confirm(`למחוק את הפרויקט «${p.name}»? פעולה זו אינה הפיכה.`)) return;
+    const res = await deleteProject(p.id);
+    if (!res.ok) { alert(res.message ?? "מחיקת הפרויקט נכשלה"); return; }
+    setSel(null);
+    load(1, q, false);
+  };
 
   const save = async () => {
     if (!editForm.name) { setEditErr("שם פרויקט הוא שדה חובה"); return; }
@@ -221,7 +231,10 @@ export default function ProjectsPage() {
             <div style={{ fontWeight: 800, fontSize: 13, color: TEXT }}>{sel.name}</div>
             <button onClick={() => setSel(null)} style={{ background: "none", border: "none", fontSize: 16, cursor: "pointer", color: MUTED }}>✕</button>
           </div>
-          <button onClick={() => openEdit(sel)} style={{ width: "100%", marginBottom: 10, fontSize: 11, padding: "6px 0", border: `1px solid ${NAVY}`, borderRadius: 6, background: WHITE, cursor: "pointer", color: NAVY, fontWeight: 700, fontFamily: "inherit" }}>✎ ערוך פרטים</button>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            <button onClick={() => openEdit(sel)} style={{ flex: 1, fontSize: 11, padding: "6px 0", border: `1px solid ${NAVY}`, borderRadius: 6, background: WHITE, cursor: "pointer", color: NAVY, fontWeight: 700, fontFamily: "inherit" }}>✎ ערוך פרטים</button>
+            {isAdmin && <button onClick={() => remove(sel)} style={{ fontSize: 11, padding: "6px 12px", border: `1px solid ${BORDER}`, borderRadius: 6, background: WHITE, cursor: "pointer", color: ERR, fontWeight: 700, fontFamily: "inherit" }}>🗑</button>}
+          </div>
           {[
             ["מספר פרויקט", sel.projectNo ?? "—"],
             ["לקוח", sel.client?.name || sel.clientName || "—"],

@@ -5,7 +5,7 @@ import { useApp } from "@/context/AppContext";
 import { Av, Btn, Input, Select, Modal, FormRow, Field } from "@/components/ui";
 import { NAVY, GOLD, BLUE, SURF, WHITE, MUTED, TEXT, BORDER, OK, WARN } from "@/lib/tokens";
 import { EVENT_TYPES, HE_MONTHS, HE_DAYS, HE_DAYS_FULL } from "@/lib/mockData";
-import { fetchCalendarEvents, createCalendarEvent, deleteCalendarEvent, fetchActiveUsers, type CrmCalendarEvent } from "@/lib/api";
+import { fetchCalendarEvents, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, fetchActiveUsers, type CrmCalendarEvent } from "@/lib/api";
 import type { Named } from "@/lib/api";
 
 // Timezone-safe day string from local date components (avoids the toISOString
@@ -25,6 +25,7 @@ export default function CalendarPage() {
   const [curDate, setCurDate]   = useState(() => new Date());
   const [selEvent, setSelEvent] = useState<CrmCalendarEvent | null>(null);
   const [addModal, setAddModal] = useState(false);
+  const [editId, setEditId]     = useState<number | null>(null);
   const [saving, setSaving]     = useState(false);
   const [gcModal,  setGcModal]  = useState(false);
   const [gcConnected, setGcConnected] = useState(false);
@@ -44,21 +45,35 @@ export default function CalendarPage() {
   // Admin can filter by rep; reps only ever receive their own events from the API.
   const visibleEvents = events.filter(ev => !isAdmin || filterUser === "all" || ev.assignee === filterUser);
 
+  const openEditEvent = (ev: CrmCalendarEvent) => {
+    setEditId(ev.id);
+    setForm({
+      title: ev.title, date: ev.date, time: ev.time || "09:00", endTime: ev.endTime || "10:00",
+      type: ev.type, assignee: ev.assignee || activeUser?.name || "", client: ev.client || "",
+      notes: ev.notes || "", location: ev.location || "",
+    });
+    setSelEvent(null);
+    setAddModal(true);
+  };
+
+  const closeAddModal = () => { setAddModal(false); setEditId(null); setForm(emptyForm); };
+
   const saveEvent = async () => {
     if (!form.title || !form.date) { alert("כותרת ותאריך הם שדות חובה"); return; }
-    // Admin chooses the assignee by name; reps create for themselves (server-assigned).
+    // Admin chooses the assignee by name; reps act on their own (server-assigned).
     const assigneeId = isAdmin ? users.find(u => u.name === form.assignee)?.id : undefined;
-    setSaving(true);
-    const res = await createCalendarEvent({
+    const payload = {
       title: form.title, date: form.date, time: form.time || null, endTime: form.endTime || null,
       type: form.type, client: form.client || null, notes: form.notes || null, location: form.location || null,
       color: colorForType(form.type), assigneeId,
-    });
+    };
+    setSaving(true);
+    const res = editId ? await updateCalendarEvent(editId, payload) : await createCalendarEvent(payload);
     setSaving(false);
     if (!res.ok || !res.event) { alert(res.message || "שמירת האירוע נכשלה"); return; }
-    setEvents(p => [...p, withColor(res.event!)]);
-    setAddModal(false);
-    setForm(emptyForm);
+    const saved = withColor(res.event);
+    setEvents(p => editId ? p.map(e => e.id === saved.id ? saved : e) : [...p, saved]);
+    closeAddModal();
   };
 
   const deleteEvent = async (id: number) => {
@@ -169,7 +184,7 @@ export default function CalendarPage() {
         {dayEvs.length === 0 && (
           <div style={{ padding: 32, textAlign: "center", color: MUTED, fontSize: 12 }}>
             אין אירועים ביום זה<br />
-            <button onClick={() => { setForm(f => ({ ...f, date: dateStr })); setAddModal(true); }}
+            <button onClick={() => { setEditId(null); setForm(f => ({ ...f, date: dateStr })); setAddModal(true); }}
               style={{ marginTop: 10, background: NAVY, color: WHITE, border: "none", borderRadius: 7, padding: "7px 16px", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>+ הוסף אירוע</button>
           </div>
         )}
@@ -231,6 +246,7 @@ export default function CalendarPage() {
               </div>
             ))}
             <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <Btn onClick={() => openEditEvent(selEvent)} sm>✎ ערוך</Btn>
               <Btn onClick={() => deleteEvent(selEvent.id)} variant="danger" sm>🗑 מחק</Btn>
               <Btn onClick={() => setSelEvent(null)} variant="secondary" sm>סגור</Btn>
             </div>
@@ -239,7 +255,7 @@ export default function CalendarPage() {
       )}
 
       {addModal && (
-        <Modal title="+ אירוע חדש" onClose={() => setAddModal(false)}>
+        <Modal title={editId ? "✎ עריכת אירוע" : "+ אירוע חדש"} onClose={closeAddModal}>
           <FormRow>
             <Field label="כותרת *"><Input value={form.title} onChange={v => setForm(p => ({ ...p, title: v }))} placeholder="שם האירוע" style={{ width: "100%" }} /></Field>
             <Field label="סוג">
@@ -261,7 +277,7 @@ export default function CalendarPage() {
           </FormRow>
           <div style={{ marginBottom: 10 }}><Field label="מיקום"><Input value={form.location} onChange={v => setForm(p => ({ ...p, location: v }))} placeholder="כתובת / Zoom / טלפון" style={{ width: "100%" }} /></Field></div>
           <div style={{ marginBottom: 12 }}><Field label="הערות"><Input value={form.notes} onChange={v => setForm(p => ({ ...p, notes: v }))} placeholder="הערות נוספות..." style={{ width: "100%" }} /></Field></div>
-          <div style={{ display: "flex", gap: 8 }}><Btn onClick={saveEvent}>✓ שמור אירוע</Btn><Btn onClick={() => setAddModal(false)} variant="secondary">ביטול</Btn></div>
+          <div style={{ display: "flex", gap: 8 }}><Btn onClick={saveEvent} disabled={saving}>{saving ? "שומר…" : editId ? "✓ עדכן אירוע" : "✓ שמור אירוע"}</Btn><Btn onClick={closeAddModal} variant="secondary">ביטול</Btn></div>
         </Modal>
       )}
 
@@ -337,7 +353,7 @@ export default function CalendarPage() {
           ))}
         </div>
 
-        <Btn onClick={() => setAddModal(true)}>+ אירוע</Btn>
+        <Btn onClick={() => { setEditId(null); setForm(emptyForm); setAddModal(true); }}>+ אירוע</Btn>
         <button onClick={() => setGcModal(true)}
           style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", border: `1px solid ${gcConnected ? OK : BORDER}`, borderRadius: 7, background: gcConnected ? "#EAF3DE" : WHITE, cursor: "pointer", fontSize: 11, fontWeight: 600, color: gcConnected ? OK : TEXT, fontFamily: "inherit" }}>
           📅 {gcConnected ? "מחובר" : "חבר Google"}

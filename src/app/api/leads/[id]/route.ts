@@ -15,6 +15,7 @@ const UpdateLeadSchema = z.object({
   source: z.string().max(50).nullable().optional(),
   notes: z.string().nullable().optional(),
   assigneeId: z.number().int().positive().optional(),
+  clientId: z.number().int().positive().nullable().optional(),
   activity: z.string().optional(),
 });
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Av, Bdg, Btn, Input, Select, Modal, FormRow, Field } from "@/components/ui";
-import { fetchLeads, createLead, deleteLead, fetchConfig, fetchActiveUsers, fetchClients, type AppConfig } from "@/lib/api";
+import { fetchLeads, createLead, updateLead, deleteLead, createClient, fetchConfig, fetchActiveUsers, fetchClients, type AppConfig } from "@/lib/api";
 import { fmt } from "@/lib/utils";
 import { LEAD_STATUS } from "@/lib/mockData";
 import { NAVY, GOLD_L, BLUE, SURF, WHITE, MUTED, TEXT, BORDER, OK, WARN, ERR } from "@/lib/tokens";
@@ -18,6 +18,8 @@ export default function LeadsPage() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [companyFocus, setCompanyFocus] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selId, setSelId] = useState<number | null>(null);
   const [selCompany, setSelCompany] = useState<string | null>(null);
@@ -77,12 +79,63 @@ export default function LeadsPage() {
   const handleFormChange = (key: string, val: string) => {
     const updated = { ...form, [key]: val };
     setForm(updated);
-    if (["name", "company", "phone"].includes(key)) setDupWarning(checkDuplicate(updated, leads));
+    if (!editId && ["name", "company", "phone"].includes(key)) setDupWarning(checkDuplicate(updated, leads));
+    if (key === "company") setClientQuery(val); // drive the existing-client search off the company field
   };
+
+  // Create a brand-new client right from the lead form and link it (or link the
+  // existing one if the exact name already exists). Keeps lead entry fast.
+  const createClientInline = async () => {
+    const name = form.company.trim();
+    if (!name) return;
+    const res = await createClient({ name });
+    if (res.ok && res.id) {
+      setForm(p => ({ ...p, clientId: String(res.id), company: name }));
+    } else if (res.existingId) {
+      setForm(p => ({ ...p, clientId: String(res.existingId), company: name }));
+    } else {
+      alert(res.message ?? "יצירת הלקוח נכשלה");
+      return;
+    }
+    setClientQuery(""); setClientResults([]); setCompanyFocus(false);
+  };
+
+  const openCreate = () => { setEditId(null); setForm(emptyForm); setDupWarning(null); setClientQuery(""); setClientResults([]); setModal(true); };
+
+  const openEdit = (l: Lead) => {
+    setEditId(l.id);
+    setForm({
+      ...emptyForm,
+      name: l.name, company: l.company, email: l.email || "", phone: l.phone || "",
+      status: l.status || "", value: l.value ? String(l.value) : "", source: l.source || "", notes: l.notes || "",
+    });
+    setDupWarning(null); setClientQuery(""); setClientResults([]); setModal(true);
+  };
+
+  const closeModal = () => { setModal(false); setEditId(null); setForm(emptyForm); setDupWarning(null); };
 
   const save = async () => {
     if (!form.name || !form.company) { alert("שם וחברה הם שדות חובה"); return; }
     setSaving(true);
+    if (editId) {
+      const res = await updateLead(editId, {
+        name: form.name,
+        company: form.company,
+        email: form.email || null,
+        phone: form.phone || null,
+        status: form.status || undefined,
+        value: parseFloat(form.value) || 0,
+        source: form.source || null,
+        notes: form.notes || null,
+        assigneeId: form.assigneeId ? Number(form.assigneeId) : undefined,
+        clientId: form.clientId ? Number(form.clientId) : null,
+      });
+      setSaving(false);
+      if (!res.ok) { alert(res.message ?? "עדכון הליד נכשל"); return; }
+      closeModal();
+      reload();
+      return;
+    }
     const res = await createLead({
       name: form.name,
       company: form.company,
@@ -149,7 +202,7 @@ export default function LeadsPage() {
 
       {/* New lead modal */}
       {modal && (
-        <Modal title="+ ליד חדש" onClose={() => { setModal(false); setDupWarning(null); setForm(emptyForm); }}>
+        <Modal title={editId ? "✎ עריכת ליד" : "+ ליד חדש"} onClose={closeModal}>
           {dupWarning && (
             <div style={{ background: "#FEF3DC", border: `1px solid ${WARN}`, borderRadius: 8, padding: "10px 13px", marginBottom: 14, display: "flex", gap: 9, alignItems: "flex-start" }}>
               <span style={{ fontSize: 16 }}>⚠️</span>
@@ -162,7 +215,34 @@ export default function LeadsPage() {
           )}
           <FormRow>
             <Field label="שם מלא *"><Input value={form.name} onChange={v => handleFormChange("name", v)} placeholder="ישראל ישראלי" style={{ width: "100%" }} /></Field>
-            <Field label="חברה *"><Input value={form.company} onChange={v => handleFormChange("company", v)} placeholder="שם החברה" style={{ width: "100%" }} /></Field>
+            <Field label="חברה *">
+              {form.clientId ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                  <span style={{ background: "#E6F1FB", color: NAVY, padding: "4px 10px", borderRadius: 7, fontWeight: 700 }}>🏢 {form.company} ✓</span>
+                  <button onClick={() => setForm(p => ({ ...p, clientId: "" }))} style={{ fontSize: 11, background: "none", border: "none", color: ERR, cursor: "pointer", fontFamily: "inherit" }}>נתק</button>
+                </div>
+              ) : (
+                <div style={{ position: "relative" }} onFocus={() => setCompanyFocus(true)} onBlur={() => setTimeout(() => setCompanyFocus(false), 150)}>
+                  <Input value={form.company} onChange={v => handleFormChange("company", v)} placeholder="שם החברה — הקלד לחיפוש לקוח קיים" style={{ width: "100%" }} />
+                  {companyFocus && form.company.trim() && (
+                    <div style={{ position: "absolute", zIndex: 10, top: "100%", right: 0, left: 0, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 7, marginTop: 2, maxHeight: 200, overflowY: "auto", boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>
+                      {clientResults.map(c => (
+                        <div key={c.id} onMouseDown={() => { setForm(p => ({ ...p, clientId: String(c.id), company: c.name })); setClientQuery(""); setClientResults([]); setCompanyFocus(false); }}
+                          style={{ padding: "7px 11px", fontSize: 12, cursor: "pointer", borderBottom: `1px solid ${SURF}`, display: "flex", alignItems: "center", gap: 6 }}>
+                          <span>🏢</span><span style={{ fontWeight: 600 }}>{c.name}</span><span style={{ marginInlineStart: "auto", fontSize: 10, color: MUTED }}>לקוח קיים</span>
+                        </div>
+                      ))}
+                      {!clientResults.some(c => c.name === form.company.trim()) && (
+                        <div onMouseDown={createClientInline}
+                          style={{ padding: "8px 11px", fontSize: 12, cursor: "pointer", color: NAVY, fontWeight: 700, background: SURF }}>
+                          ➕ צור «{form.company.trim()}» כלקוח חדש
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Field>
           </FormRow>
           <FormRow>
             <Field label="מייל"><Input value={form.email} onChange={v => handleFormChange("email", v)} placeholder="email@co.il" style={{ width: "100%" }} /></Field>
@@ -196,28 +276,6 @@ export default function LeadsPage() {
             </Field>
           </div>
           <div style={{ marginBottom: 10 }}>
-            <Field label="קישור ללקוח קיים (אופציונלי)">
-              {form.clientId ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                  <span style={{ background: "#E6F1FB", color: NAVY, padding: "4px 10px", borderRadius: 7, fontWeight: 700 }}>🏢 {form.company}</span>
-                  <button onClick={() => setForm(p => ({ ...p, clientId: "" }))} style={{ fontSize: 11, background: "none", border: "none", color: ERR, cursor: "pointer", fontFamily: "inherit" }}>נתק</button>
-                </div>
-              ) : (
-                <div style={{ position: "relative" }}>
-                  <Input value={clientQuery} onChange={setClientQuery} placeholder="הקלד שם לקוח לחיפוש וקישור..." style={{ width: "100%" }} />
-                  {clientResults.length > 0 && (
-                    <div style={{ position: "absolute", zIndex: 10, top: "100%", right: 0, left: 0, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 7, marginTop: 2, maxHeight: 160, overflowY: "auto", boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>
-                      {clientResults.map(c => (
-                        <div key={c.id} onClick={() => { setForm(p => ({ ...p, clientId: String(c.id), company: c.name })); setClientQuery(""); setClientResults([]); }}
-                          style={{ padding: "7px 11px", fontSize: 12, cursor: "pointer", borderBottom: `1px solid ${SURF}` }}>{c.name}</div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </Field>
-          </div>
-          <div style={{ marginBottom: 10 }}>
             <Field label="הערות">
               <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="הערות ראשוניות..." rows={2}
                 style={{ width: "100%", fontSize: 12, padding: "8px 10px", border: `1px solid ${BORDER}`, borderRadius: 7, fontFamily: "inherit", resize: "none", outline: "none" }} />
@@ -228,12 +286,12 @@ export default function LeadsPage() {
               <>
                 <button onClick={() => { setSelId(dupWarning.match.id); setSelCompany(dupWarning.match.company); setModal(false); setDupWarning(null); }}
                   style={{ background: WHITE, color: NAVY, border: `1px solid ${NAVY}`, borderRadius: 7, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>פתח ליד קיים</button>
-                <Btn onClick={() => { setModal(false); setDupWarning(null); setForm(emptyForm); }} variant="secondary">ביטול</Btn>
+                <Btn onClick={closeModal} variant="secondary">ביטול</Btn>
               </>
             ) : (
               <>
-                <Btn onClick={save} disabled={saving}>{saving ? "שומר…" : "✓ שמור ליד"}</Btn>
-                <Btn onClick={() => { setModal(false); setForm(emptyForm); }} variant="secondary">ביטול</Btn>
+                <Btn onClick={save} disabled={saving}>{saving ? "שומר…" : editId ? "✓ עדכן ליד" : "✓ שמור ליד"}</Btn>
+                <Btn onClick={closeModal} variant="secondary">ביטול</Btn>
               </>
             )}
           </div>
@@ -247,7 +305,7 @@ export default function LeadsPage() {
             <div style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>ניהול לידים</div>
             <div style={{ fontSize: 11, color: MUTED, marginTop: 1 }}>{groups.length} חברות · {filtered.length} אנשי קשר</div>
           </div>
-          <Btn onClick={() => { setForm(emptyForm); setDupWarning(null); setModal(true); }}>+ ליד חדש</Btn>
+          <Btn onClick={openCreate}>+ ליד חדש</Btn>
         </div>
 
         <div style={{ display: "flex", gap: 7, marginBottom: 10, flexShrink: 0 }}>
@@ -325,7 +383,7 @@ export default function LeadsPage() {
                       );
                     })}
                     <div style={{ padding: "9px 18px", borderTop: `1px solid ${BORDER}` }}>
-                      <button onClick={e => { e.stopPropagation(); setForm({ ...emptyForm, company: group.company }); setDupWarning(null); setModal(true); }}
+                      <button onClick={e => { e.stopPropagation(); setEditId(null); setForm({ ...emptyForm, company: group.company }); setDupWarning(null); setModal(true); }}
                         style={{ fontSize: 11, fontWeight: 600, padding: "5px 12px", border: `1px dashed ${BORDER}`, borderRadius: 7, background: "transparent", color: MUTED, cursor: "pointer", fontFamily: "inherit" }}>
                         + הוסף איש קשר ל-{group.company}
                       </button>
@@ -349,7 +407,10 @@ export default function LeadsPage() {
                 <div style={{ fontSize: 11, color: BLUE, fontWeight: 600 }}>🏢 {sel.company}</div>
               </div>
             </div>
-            <button onClick={() => setSelId(null)} style={{ background: "none", border: "none", fontSize: 16, cursor: "pointer", color: MUTED }}>✕</button>
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <button onClick={() => openEdit(sel)} title="ערוך ליד" style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 11, padding: "3px 9px", cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך</button>
+              <button onClick={() => setSelId(null)} style={{ background: "none", border: "none", fontSize: 16, cursor: "pointer", color: MUTED }}>✕</button>
+            </div>
           </div>
           <div style={{ flex: 1, overflowY: "auto" }}>
             <div style={{ padding: "11px 15px", borderBottom: `1px solid ${BORDER}`, display: "flex", gap: 10, alignItems: "center" }}>

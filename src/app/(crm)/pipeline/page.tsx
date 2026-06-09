@@ -3,13 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { HBar, Btn, Modal, FormRow, Field, Input, Select } from "@/components/ui";
 import { fmt } from "@/lib/utils";
-import { fetchConfig, fetchDeals, createDeal, updateDealStage, fetchClients, type AppConfig, type CrmDeal, type PipelineCfg } from "@/lib/api";
+import { fetchConfig, fetchDeals, createDeal, updateDealStage, deleteDeal, fetchClients, type AppConfig, type CrmDeal, type PipelineCfg } from "@/lib/api";
+import { useApp } from "@/context/AppContext";
 import { NAVY, GOLD, GOLD_L, SURF, WHITE, MUTED, TEXT, BORDER, OK, WARN, ERR } from "@/lib/tokens";
 
 type Named = { id: number; name: string };
 const emptyForm = { title: "", company: "", value: "", probability: "50", stageId: "", clientId: "" };
 
 export default function PipelinePage() {
+  const { isAdmin } = useApp();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [pipelineId, setPipelineId] = useState<number | null>(null);
   const [deals, setDeals] = useState<CrmDeal[]>([]);
@@ -65,6 +67,14 @@ export default function PipelinePage() {
     setSaving(false);
     if (!res.ok) { setFormErr(res.message ?? "השמירה נכשלה"); return; }
     setModal(false); setForm(emptyForm); reloadDeals(pipelineId);
+  };
+
+  const removeDeal = async (deal: CrmDeal) => {
+    if (!window.confirm(`למחוק את העסקה «${deal.title}»? פעולה זו אינה הפיכה.`)) return;
+    const prev = deals;
+    setDeals(ds => ds.filter(d => d.id !== deal.id)); // optimistic
+    const res = await deleteDeal(deal.id);
+    if (!res.ok) { setDeals(prev); alert(res.message ?? "מחיקת העסקה נכשלה"); }
   };
 
   const openVal = deals.filter(d => { const st = stages.find(s => s.id === d.stageId); return st && !st.isWon && !st.isLost; }).reduce((s, d) => s + d.value, 0);
@@ -161,7 +171,11 @@ export default function PipelinePage() {
                 {sd.map(deal => (
                   <div key={deal.id} draggable onDragStart={() => setDragId(deal.id)}
                     style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 7, padding: 9, cursor: "grab", borderLeft: `3px solid ${color}` }}>
-                    <div style={{ fontWeight: 700, fontSize: 11, color: TEXT, marginBottom: 2 }}>{deal.title}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 4, marginBottom: 2 }}>
+                      <div style={{ fontWeight: 700, fontSize: 11, color: TEXT }}>{deal.title}</div>
+                      {isAdmin && <button onClick={e => { e.stopPropagation(); removeDeal(deal); }} title="מחק עסקה"
+                        style={{ flexShrink: 0, fontSize: 10, lineHeight: 1, padding: "1px 3px", border: "none", background: "transparent", color: MUTED, cursor: "pointer", fontFamily: "inherit" }}>🗑</button>}
+                    </div>
                     <div style={{ fontSize: 10, color: MUTED, marginBottom: 5 }}>{deal.client?.name || deal.company}</div>
                     <div style={{ fontSize: 14, fontWeight: 800, color: NAVY, marginBottom: 4 }}>{fmt(deal.value)}</div>
                     <HBar score={deal.health} />

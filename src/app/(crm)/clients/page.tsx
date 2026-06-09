@@ -2,13 +2,15 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Av, Stat, Input, Btn, Select, Modal, FormRow, Field } from "@/components/ui";
-import { fetchClients, updateClient, createClient, fetchActiveUsers, type CrmClientRow } from "@/lib/api";
+import { fetchClients, updateClient, createClient, deleteClient, fetchActiveUsers, type CrmClientRow } from "@/lib/api";
+import { useApp } from "@/context/AppContext";
 import { NAVY, GOLD, GOLD_L, WHITE, MUTED, TEXT, BORDER, OK, ERR, SURF } from "@/lib/tokens";
 
 type Named = { id: number; name: string };
 const emptyEdit = { name: "", industry: "", email: "", phone: "", address: "", website: "", status: "", assigneeId: "", notes: "" };
 
 export default function ClientsPage() {
+  const { isAdmin } = useApp();
   const [rows, setRows] = useState<CrmClientRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -62,6 +64,14 @@ export default function ClientsPage() {
   };
 
   const closeModal = () => { setEditId(null); setCreating(false); };
+
+  const remove = async (c: CrmClientRow) => {
+    if (!window.confirm(`למחוק את הלקוח «${c.name}»? פעולה זו אינה הפיכה.`)) return;
+    const res = await deleteClient(c.id);
+    if (!res.ok) { alert(res.message ?? "מחיקת הלקוח נכשלה"); return; }
+    setSelected(null);
+    load(1, q, false);
+  };
 
   const save = async () => {
     if (!editForm.name) { setEditErr("שם הוא שדה חובה"); return; }
@@ -191,7 +201,10 @@ export default function ClientsPage() {
             <Av name={selected.name} size={48} color={NAVY} />
             <div style={{ fontWeight: 800, fontSize: 14, color: TEXT, marginTop: 8 }}>{selected.name}</div>
             <div style={{ fontSize: 11, color: MUTED }}>{selected.industry || "—"}</div>
-            <button onClick={() => openEdit(selected)} style={{ marginTop: 8, fontSize: 11, padding: "4px 12px", border: `1px solid ${BORDER}`, borderRadius: 6, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך פרטים</button>
+            <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 8 }}>
+              <button onClick={() => openEdit(selected)} style={{ fontSize: 11, padding: "4px 12px", border: `1px solid ${BORDER}`, borderRadius: 6, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך פרטים</button>
+              {isAdmin && <button onClick={() => remove(selected)} style={{ fontSize: 11, padding: "4px 12px", border: `1px solid ${BORDER}`, borderRadius: 6, background: WHITE, cursor: "pointer", color: ERR, fontFamily: "inherit" }}>🗑 מחק</button>}
+            </div>
           </div>
           <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 8 }}>פרטים</div>

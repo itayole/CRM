@@ -180,6 +180,12 @@ export async function createCalendarEvent(input: CalendarEventInput): Promise<{ 
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת האירוע נכשלה" };
 }
+export async function updateCalendarEvent(id: number, patch: Partial<CalendarEventInput>): Promise<{ ok: boolean; event?: CrmCalendarEvent; message?: string }> {
+  const res = await fetch(`/api/calendar/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  if (res.ok) return { ok: true, event: toUIEvent((await res.json()) as ApiCalendarEvent) };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "עדכון האירוע נכשל" };
+}
 export async function deleteCalendarEvent(id: number): Promise<{ ok: boolean; message?: string }> {
   const res = await fetch(`/api/calendar/${id}`, { method: "DELETE" });
   if (res.ok) return { ok: true };
@@ -246,6 +252,18 @@ export async function createLead(input: LeadCreateInput): Promise<LeadCreateResu
 export async function deleteLead(id: number): Promise<boolean> {
   const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
   return res.ok;
+}
+
+export interface LeadUpdateInput {
+  name?: string; company?: string; email?: string | null; phone?: string | null;
+  status?: string; value?: number; source?: string | null; notes?: string | null;
+  assigneeId?: number; clientId?: number | null;
+}
+export async function updateLead(id: number, patch: LeadUpdateInput): Promise<{ ok: boolean; lead?: Lead; message?: string }> {
+  const res = await fetch(`/api/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  if (res.ok) return { ok: true, lead: toUILead((await res.json()) as ApiLead) };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "עדכון הליד נכשל" };
 }
 
 // ── Users (admin) ───────────────────────────────────────────────────────────
@@ -328,12 +346,18 @@ export interface ClientCreateInput {
   name: string; industry?: string; email?: string; phone?: string; address?: string;
   website?: string; size?: string; status?: "active" | "prospect"; notes?: string; assigneeId?: number;
 }
-export async function createClient(input: ClientCreateInput): Promise<{ ok: boolean; message?: string }> {
+export async function createClient(input: ClientCreateInput): Promise<{ ok: boolean; id?: number; message?: string; existingId?: number }> {
   const res = await fetch("/api/clients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
-  if (res.ok) return { ok: true };
-  if (res.status === 409) return { ok: false, message: "לקוח עם שם זה כבר קיים במערכת" };
+  if (res.ok) { const c = (await res.json()) as { id: number }; return { ok: true, id: c.id }; }
   const b = await res.json().catch(() => ({}));
+  if (res.status === 409) return { ok: false, message: "לקוח עם שם זה כבר קיים במערכת", existingId: typeof b?.existingId === "number" ? b.existingId : undefined };
   return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת הלקוח נכשלה" };
+}
+export async function deleteClient(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/clients/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת הלקוח נכשלה" };
 }
 
 export async function fetchClients(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmClientRow>> {
@@ -403,6 +427,12 @@ export interface ProjectPatch {
   model?: string | null; methodology?: string | null; state?: string | null; statusText?: string | null; billing?: number | null;
 }
 export const updateProject = (id: number, patch: ProjectPatch) => patchOk(`/api/projects/${id}`, patch);
+export async function deleteProject(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת הפרויקט נכשלה" };
+}
 
 // ── Deals (pipeline) ────────────────────────────────────────────────────────
 export interface CrmDeal {
@@ -436,6 +466,12 @@ export async function createDeal(input: DealInput): Promise<{ ok: boolean; messa
   return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת העסקה נכשלה" };
 }
 export const updateDealStage = (id: number, stageId: number) => patchOk(`/api/deals/${id}`, { stageId });
+export async function deleteDeal(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/deals/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת העסקה נכשלה" };
+}
 
 // ── Contacts ────────────────────────────────────────────────────────────────
 export interface CrmContactRow {
