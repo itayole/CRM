@@ -50,8 +50,7 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         assignee: { select: { id: true, name: true } },
-        contacts: true,
-        _count: { select: { projects: true, deals: true } },
+        _count: { select: { projects: true, deals: true, contactPeople: true } },
       },
       orderBy: { name: "asc" },
       skip: (page - 1) * limit,

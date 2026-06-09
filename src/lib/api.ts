@@ -154,3 +154,62 @@ export async function deleteUser(id: number): Promise<{ ok: boolean; message?: s
   const body = await res.json().catch(() => ({}));
   return { ok: false, message: typeof body?.error === "string" ? body.error : "מחיקת המשתמש נכשלה" };
 }
+
+// ── Paginated list envelope ─────────────────────────────────────────────────
+export interface Page<T> { data: T[]; total: number; page: number; limit: number }
+interface Named { id: number; name: string }
+
+// ── Clients ─────────────────────────────────────────────────────────────────
+export interface CrmClientRow {
+  id: number; name: string; industry: string | null; email: string | null; phone: string | null;
+  status: string | null; assignee: Named | null;
+  projectCount: number; contactCount: number; dealCount: number;
+}
+interface ApiClient {
+  id: number; name: string; industry: string | null; email: string | null; phone: string | null;
+  status: string | null; assignee: Named | null;
+  _count?: { projects: number; deals: number; contactPeople: number };
+}
+const toUIClient = (c: ApiClient): CrmClientRow => ({
+  id: c.id, name: c.name, industry: c.industry, email: c.email, phone: c.phone, status: c.status,
+  assignee: c.assignee ?? null,
+  projectCount: c._count?.projects ?? 0, contactCount: c._count?.contactPeople ?? 0, dealCount: c._count?.deals ?? 0,
+});
+
+export async function fetchClients(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmClientRow>> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  qs.set("page", String(params.page ?? 1));
+  qs.set("limit", String(params.limit ?? 60));
+  const res = await fetch(`/api/clients?${qs}`, { cache: "no-store" });
+  const body = (await jsonOrThrow(res)) as Page<ApiClient>;
+  return { ...body, data: (body.data ?? []).map(toUIClient) };
+}
+
+// ── Projects ────────────────────────────────────────────────────────────────
+export interface CrmProjectRow {
+  id: number; projectNo: number | null; name: string; clientName: string | null; client: Named | null;
+  assignee: Named | null; state: string | null; statusText: string | null; methodology: string | null;
+  model: string | null; billing: number | null; sourceCreatedAt: string | null; lastUpdated: string | null;
+}
+interface ApiProject {
+  id: number; projectNo: number | null; name: string; clientName: string | null; client: Named | null;
+  assignee: Named | null; state: string | null; statusText: string | null; methodology: string | null;
+  model: string | null; billing: string | number | null; sourceCreatedAt: string | null; lastUpdated: string | null;
+}
+const toUIProject = (p: ApiProject): CrmProjectRow => ({
+  id: p.id, projectNo: p.projectNo, name: p.name, clientName: p.clientName, client: p.client ?? null,
+  assignee: p.assignee ?? null, state: p.state, statusText: p.statusText, methodology: p.methodology,
+  model: p.model, billing: p.billing == null ? null : Number(p.billing),
+  sourceCreatedAt: p.sourceCreatedAt, lastUpdated: p.lastUpdated,
+});
+
+export async function fetchProjects(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmProjectRow>> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  qs.set("page", String(params.page ?? 1));
+  qs.set("limit", String(params.limit ?? 60));
+  const res = await fetch(`/api/projects?${qs}`, { cache: "no-store" });
+  const body = (await jsonOrThrow(res)) as Page<ApiProject>;
+  return { ...body, data: (body.data ?? []).map(toUIProject) };
+}
