@@ -20,6 +20,8 @@ model User {
   leads     Lead[]          @relation("LeadAssignee")
   deals     Deal[]          @relation("DealAssignee")
   clients   Client[]        @relation("ClientAssignee")
+  projects  Project[]       @relation("ProjectAssignee")
+  contacts  Contact[]       @relation("ContactAccountMgr")
   tasks     Task[]          @relation("TaskAssignee")
   calEvents CalendarEvent[]
 
@@ -120,22 +122,24 @@ model ConfigOption {
 }
 
 model Client {
-  id         Int             @id @default(autoincrement())
-  name       String          @unique @db.NVarChar(200)
-  industry   String          @db.NVarChar(50)
-  email      String?         @db.NVarChar(320)
-  phone      String?         @db.NVarChar(30)
-  address    String?         @db.NVarChar(300)
-  website    String?         @db.NVarChar(200)
-  size       String?         @db.NVarChar(20)   // "1-10"|"10-50"|"50-200"|"200+"
-  status     String          @db.NVarChar(20)   // "active"|"prospect"
-  since      DateTime
-  assigneeId Int
-  notes      String?         @db.NVarChar(Max)
-  assignee   User            @relation("ClientAssignee", fields: [assigneeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  contacts   ClientContact[]
-  projects   Project[]
-  deals      Deal[]
+  id             Int             @id @default(autoincrement())
+  name           String          @unique @db.NVarChar(200)
+  mfilesClientNo Int?            @unique            // external M-Files client number (sync key)
+  industry       String?         @db.NVarChar(50)
+  email          String?         @db.NVarChar(320)
+  phone          String?         @db.NVarChar(30)
+  address        String?         @db.NVarChar(300)
+  website        String?         @db.NVarChar(200)
+  size           String?         @db.NVarChar(20)   // "1-10"|"10-50"|"50-200"|"200+"
+  status         String?         @db.NVarChar(20)   // "active"|"prospect"
+  since          DateTime?
+  assigneeId     Int?                               // account manager (CRM user)
+  notes          String?         @db.NVarChar(Max)
+  assignee       User?           @relation("ClientAssignee", fields: [assigneeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contacts       ClientContact[]
+  contactPeople  Contact[]
+  projects       Project[]
+  deals          Deal[]
 
   @@map("clients")
 }
@@ -157,26 +161,56 @@ model ClientContact {
 }
 
 model Project {
-  id         Int            @id @default(autoincrement())
-  clientId   Int
-  contactId  Int?
-  name       String         @db.NVarChar(300)
-  desc       String?        @db.NVarChar(Max)
-  status     String         @db.NVarChar(20)   // "planning"|"active"|"paused"|"completed"
-  priority   String         @db.NVarChar(10)   // "high"|"medium"|"low"
-  budget     Decimal        @db.Decimal(18, 2)
-  spent      Decimal        @default(0)        @db.Decimal(18, 2)
-  progress   Int            @default(0)
-  startDate  DateTime?
-  endDate    DateTime?
-  assigneeId Int
-  tags       String?        @db.NVarChar(500)  // JSON: ["tag1","tag2"]
-  // NoAction breaks the dual cascade path: User→Project (direct) vs User→Client→Project (indirect)
-  client     Client         @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  phases     ProjectPhase[]
+  id               Int             @id @default(autoincrement())
+  clientId         Int?
+  contactId        Int?
+  name             String          @db.NVarChar(300)
+  desc             String?         @db.NVarChar(Max)
+  status           String?         @db.NVarChar(20)   // "planning"|"active"|"paused"|"completed"
+  priority         String?         @db.NVarChar(10)   // "high"|"medium"|"low"
+  budget           Decimal?        @db.Decimal(18, 2)
+  spent            Decimal         @default(0)        @db.Decimal(18, 2)
+  progress         Int             @default(0)
+  startDate        DateTime?
+  endDate          DateTime?
+  assigneeId       Int?                               // account manager (CRM user)
+  tags             String?         @db.NVarChar(500)  // JSON: ["tag1","tag2"]
+  // ── M-Files project attributes (synced from M-Files) ──
+  projectNo        Int?            @unique            // M-Files project number (sync key)
+  shiluvNo         String?         @db.NVarChar(50)
+  clientName       String?         @db.NVarChar(200)  // raw client name from M-Files (pre name-match)
+  model            String?         @db.NVarChar(100)
+  methodology      String?         @db.NVarChar(100)  // e.g. "כמותי" / "איכותני"
+  state            String?         @db.NVarChar(100)
+  statusText       String?         @db.NVarChar(100)
+  abc              String?         @db.NVarChar(10)
+  tpName           String?         @db.NVarChar(200)
+  questionsCount   Int?
+  billing          Decimal?        @db.Decimal(18, 2)
+  proposalDate     DateTime?
+  approvalDate     DateTime?
+  cancelledDate    DateTime?
+  billingDate      DateTime?
+  actualEndDate    DateTime?
+  relevantDate     DateTime?
+  lastUpdated      DateTime?
+  sourceCreatedAt  DateTime?
+  researchTypeId   Int?
+  researchMethodId Int?
+  productId        Int?
+  // NoAction throughout: avoids MSSQL multiple-cascade-path conflicts.
+  client           Client?         @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assignee         User?           @relation("ProjectAssignee", fields: [assigneeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  researchType     ResearchType?   @relation(fields: [researchTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  researchMethod   ResearchMethod? @relation(fields: [researchMethodId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product          Product?        @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  phases           ProjectPhase[]
 
   @@index([clientId])
   @@index([assigneeId])
+  @@index([researchTypeId])
+  @@index([researchMethodId])
+  @@index([productId])
   @@map("projects")
 }
 
@@ -259,4 +293,60 @@ model LeadIntegration {
   todayLeads   Int     @default(0)
 
   @@map("lead_integrations")
+}
+
+// ── M-Files synced data ──────────────────────────────────────────────────────
+// Standalone contacts imported from M-Files (active / raw / unsubscribed sheets).
+model Contact {
+  id               Int      @id @default(autoincrement())
+  mfilesId         Int?                              // M-Files object id (sync key)
+  fullName         String?  @db.NVarChar(200)
+  firstName        String?  @db.NVarChar(100)
+  email            String?  @db.NVarChar(320)
+  mobile           String?  @db.NVarChar(40)
+  companyName      String?  @db.NVarChar(200)        // raw company name from M-Files (pre name-match)
+  category         String?  @db.NVarChar(200)
+  newsletterType   String?  @db.NVarChar(100)
+  newsletter       Boolean  @default(false)
+  status           String?  @db.NVarChar(30)         // "active" | "raw" | "unsubscribed"
+  clientId         Int?
+  accountManagerId Int?
+  client           Client?  @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  accountManager   User?    @relation("ContactAccountMgr", fields: [accountManagerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([email])
+  @@index([companyName])
+  @@index([clientId])
+  @@map("contacts")
+}
+
+// Lookup tables synced from M-Files (referenced by Project).
+model Product {
+  id       Int       @id @default(autoincrement())
+  mfilesId Int?      @unique
+  name     String    @db.NVarChar(300)
+  active   Boolean   @default(true)
+  projects Project[]
+
+  @@map("products")
+}
+
+model ResearchType {
+  id       Int       @id @default(autoincrement())
+  mfilesId Int?      @unique
+  name     String    @db.NVarChar(200)
+  active   Boolean   @default(true)
+  projects Project[]
+
+  @@map("research_types")
+}
+
+model ResearchMethod {
+  id       Int       @id @default(autoincrement())
+  mfilesId Int?      @unique
+  name     String    @db.NVarChar(200)
+  active   Boolean   @default(true)
+  projects Project[]
+
+  @@map("research_methods")
 }
