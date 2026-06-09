@@ -1,47 +1,73 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
 import { Av, Btn, Input, Select, Modal, FormRow, Field } from "@/components/ui";
 import { NAVY, GOLD, BLUE, SURF, WHITE, MUTED, TEXT, BORDER, OK, WARN } from "@/lib/tokens";
 import { EVENT_TYPES, HE_MONTHS, HE_DAYS, HE_DAYS_FULL } from "@/lib/mockData";
-import type { CalendarEvent } from "@/lib/types";
+import { fetchCalendarEvents, createCalendarEvent, deleteCalendarEvent, fetchActiveUsers, type CrmCalendarEvent } from "@/lib/api";
+import type { Named } from "@/lib/api";
 
-const TODAY = new Date(2026, 4, 4);
+// Timezone-safe day string from local date components (avoids the toISOString
+// UTC off-by-one that shifts the day in UTC+ timezones like Israel).
+const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-const isoDate = (d: Date) => d.toISOString().slice(0, 10);
-
-const ASSIGNEES = ["מיכל כהן", "ירון לוי", "אייל נחמני"];
+const colorForType = (type: string) => (EVENT_TYPES as Record<string, { color: string }>)[type]?.color || MUTED;
+const withColor = (e: CrmCalendarEvent): CrmCalendarEvent => ({ ...e, color: e.color || colorForType(e.type) });
 
 export default function CalendarPage() {
-  const { calendarEvents: events, setCalendarEvents: setEvents, activeUser, isAdmin } = useApp();
+  const { activeUser, isAdmin } = useApp();
+  const [events, setEvents] = useState<CrmCalendarEvent[]>([]);
+  const [users, setUsers] = useState<Named[]>([]);
+  const [loadErr, setLoadErr] = useState("");
   const [viewMode, setViewMode] = useState<"day" | "month" | "year">("month");
-  const [curDate, setCurDate]   = useState(TODAY);
-  const [selEvent, setSelEvent] = useState<CalendarEvent | null>(null);
+  const [TODAY] = useState(() => new Date());
+  const [curDate, setCurDate]   = useState(() => new Date());
+  const [selEvent, setSelEvent] = useState<CrmCalendarEvent | null>(null);
   const [addModal, setAddModal] = useState(false);
+  const [saving, setSaving]     = useState(false);
   const [gcModal,  setGcModal]  = useState(false);
   const [gcConnected, setGcConnected] = useState(false);
   const [filterUser, setFilterUser]   = useState("all");
 
-  const emptyForm = { title: "", date: "2026-05-10", time: "09:00", endTime: "10:00", type: "meeting", assignee: activeUser?.name || "מיכל כהן", client: "", notes: "", location: "" };
+  const emptyForm = { title: "", date: isoDate(TODAY), time: "09:00", endTime: "10:00", type: "meeting", assignee: activeUser?.name || "", client: "", notes: "", location: "" };
   const [form, setForm] = useState(emptyForm);
 
-  const visibleEvents = events.filter((ev: CalendarEvent) => {
-    const userMatch = isAdmin
-      ? (filterUser === "all" || ev.assignee === filterUser)
-      : ev.assignee === activeUser?.name;
-    return userMatch;
-  });
+  useEffect(() => {
+    fetchCalendarEvents()
+      .then(evs => setEvents(evs.map(withColor)))
+      .catch(e => setLoadErr(e instanceof Error ? e.message : "טעינת היומן נכשלה"));
+    // Active-user list powers the admin filter + assignee picker (admin-only endpoint → [] for reps).
+    if (isAdmin) fetchActiveUsers().then(setUsers).catch(() => setUsers([]));
+  }, [isAdmin]);
 
-  const saveEvent = () => {
+  // Admin can filter by rep; reps only ever receive their own events from the API.
+  const visibleEvents = events.filter(ev => !isAdmin || filterUser === "all" || ev.assignee === filterUser);
+
+  const saveEvent = async () => {
     if (!form.title || !form.date) { alert("כותרת ותאריך הם שדות חובה"); return; }
-    const color = (EVENT_TYPES as any)[form.type]?.color || MUTED;
-    setEvents((p: CalendarEvent[]) => [...p, { ...form, id: Date.now(), color } as CalendarEvent]);
+    // Admin chooses the assignee by name; reps create for themselves (server-assigned).
+    const assigneeId = isAdmin ? users.find(u => u.name === form.assignee)?.id : undefined;
+    setSaving(true);
+    const res = await createCalendarEvent({
+      title: form.title, date: form.date, time: form.time || null, endTime: form.endTime || null,
+      type: form.type, client: form.client || null, notes: form.notes || null, location: form.location || null,
+      color: colorForType(form.type), assigneeId,
+    });
+    setSaving(false);
+    if (!res.ok || !res.event) { alert(res.message || "שמירת האירוע נכשלה"); return; }
+    setEvents(p => [...p, withColor(res.event!)]);
     setAddModal(false);
     setForm(emptyForm);
   };
 
-  const deleteEvent = (id: number) => { setEvents((p: CalendarEvent[]) => p.filter(e => e.id !== id)); setSelEvent(null); };
+  const deleteEvent = async (id: number) => {
+    const prev = events;
+    setEvents(p => p.filter(e => e.id !== id)); // optimistic
+    setSelEvent(null);
+    const res = await deleteCalendarEvent(id);
+    if (!res.ok) { setEvents(prev); alert(res.message || "מחיקת האירוע נכשלה"); }
+  };
 
   const navigate = (dir: number) => {
     const d = new Date(curDate);
@@ -58,9 +84,9 @@ export default function CalendarPage() {
   };
 
   const eventsOn = (dateStr: string) =>
-    visibleEvents.filter((e: CalendarEvent) => e.date === dateStr).sort((a: CalendarEvent, b: CalendarEvent) => (a.time || "").localeCompare(b.time || ""));
+    visibleEvents.filter((e: CrmCalendarEvent) => e.date === dateStr).sort((a: CrmCalendarEvent, b: CrmCalendarEvent) => (a.time || "").localeCompare(b.time || ""));
 
-  const EventChip = ({ ev, compact = false }: { ev: CalendarEvent; compact?: boolean }) => (
+  const EventChip = ({ ev, compact = false }: { ev: CrmCalendarEvent; compact?: boolean }) => (
     <div onClick={e => { e.stopPropagation(); setSelEvent(ev); }}
       style={{ background: ev.color + "22", borderRight: `3px solid ${ev.color}`, borderRadius: 4, padding: compact ? "2px 5px" : "3px 7px", marginBottom: 2, cursor: "pointer", fontSize: compact ? 10 : 11, color: TEXT, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
       onMouseEnter={e => (e.currentTarget.style.background = ev.color + "44")}
@@ -96,7 +122,7 @@ export default function CalendarPage() {
                 onMouseEnter={e => { if (!isToday) e.currentTarget.style.background = SURF; }}
                 onMouseLeave={e => { if (!isToday) e.currentTarget.style.background = WHITE; }}>
                 <div style={{ fontSize: 11, fontWeight: isToday ? 800 : 500, width: 20, height: 20, borderRadius: "50%", background: isToday ? BLUE : "transparent", color: isToday ? WHITE : TEXT, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 2 }}>{day}</div>
-                {dayEvs.slice(0, 2).map((ev: CalendarEvent) => <EventChip key={ev.id} ev={ev} compact />)}
+                {dayEvs.slice(0, 2).map((ev: CrmCalendarEvent) => <EventChip key={ev.id} ev={ev} compact />)}
                 {dayEvs.length > 2 && <div style={{ fontSize: 9, color: MUTED, fontWeight: 600 }}>+{dayEvs.length - 2} נוספים</div>}
               </div>
             );
@@ -115,12 +141,12 @@ export default function CalendarPage() {
         <div style={{ display: "grid", gridTemplateColumns: "52px 1fr", borderTop: `1px solid ${BORDER}` }}>
           {hours.map(h => {
             const hStr = String(h).padStart(2, "0") + ":00";
-            const slotEvs = dayEvs.filter((ev: CalendarEvent) => ev.time && ev.time.startsWith(String(h).padStart(2, "0")));
+            const slotEvs = dayEvs.filter((ev: CrmCalendarEvent) => ev.time && ev.time.startsWith(String(h).padStart(2, "0")));
             return (
               <div key={h} style={{ display: "contents" }}>
                 <div style={{ padding: "10px 6px", borderBottom: `1px solid ${BORDER}`, borderLeft: `1px solid ${BORDER}`, textAlign: "left", fontSize: 10, color: MUTED, fontWeight: 600 }}>{hStr}</div>
                 <div style={{ padding: 4, borderBottom: `1px solid ${BORDER}`, minHeight: 44, background: h % 2 === 0 ? WHITE : SURF + "88" }}>
-                  {slotEvs.map((ev: CalendarEvent) => (
+                  {slotEvs.map((ev: CrmCalendarEvent) => (
                     <div key={ev.id} onClick={() => setSelEvent(ev)}
                       style={{ background: ev.color + "22", border: `1px solid ${ev.color}`, borderRight: `4px solid ${ev.color}`, borderRadius: 6, padding: "5px 10px", marginBottom: 3, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
                       onMouseEnter={e => (e.currentTarget.style.background = ev.color + "44")}
@@ -157,7 +183,7 @@ export default function CalendarPage() {
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
           {Array.from({ length: 12 }, (_, m) => {
-            const monthEvs = visibleEvents.filter((e: CalendarEvent) => e.date.startsWith(`${year}-${String(m + 1).padStart(2, "0")}`));
+            const monthEvs = visibleEvents.filter((e: CrmCalendarEvent) => e.date.startsWith(`${year}-${String(m + 1).padStart(2, "0")}`));
             const isCurrentMonth = m === TODAY.getMonth() && year === TODAY.getFullYear();
             return (
               <div key={m} onClick={() => { setCurDate(new Date(year, m, 1)); setViewMode("month"); }}
@@ -167,7 +193,7 @@ export default function CalendarPage() {
                 <div style={{ fontWeight: 700, fontSize: 12, color: isCurrentMonth ? BLUE : TEXT, marginBottom: 8 }}>{(HE_MONTHS as string[])[m]}</div>
                 {monthEvs.length === 0
                   ? <div style={{ fontSize: 10, color: MUTED }}>ללא אירועים</div>
-                  : monthEvs.slice(0, 3).map((ev: CalendarEvent) => (
+                  : monthEvs.slice(0, 3).map((ev: CrmCalendarEvent) => (
                     <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
                       <div style={{ width: 6, height: 6, borderRadius: "50%", background: ev.color, flexShrink: 0 }} />
                       <div style={{ fontSize: 10, color: TEXT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
@@ -228,7 +254,9 @@ export default function CalendarPage() {
           <FormRow>
             <Field label="לקוח"><Input value={form.client} onChange={v => setForm(p => ({ ...p, client: v }))} placeholder="שם הלקוח" style={{ width: "100%" }} /></Field>
             <Field label="נציג">
-              <Select value={form.assignee} onChange={v => setForm(p => ({ ...p, assignee: v }))} options={ASSIGNEES.map(x => ({ value: x, label: x }))} style={{ width: "100%" }} />
+              {isAdmin
+                ? <Select value={form.assignee} onChange={v => setForm(p => ({ ...p, assignee: v }))} options={users.map(u => ({ value: u.name, label: u.name }))} style={{ width: "100%" }} />
+                : <div style={{ padding: "8px 11px", border: `1px solid ${BORDER}`, borderRadius: 7, fontSize: 12, color: MUTED, background: SURF }}>{activeUser?.name || "—"}</div>}
             </Field>
           </FormRow>
           <div style={{ marginBottom: 10 }}><Field label="מיקום"><Input value={form.location} onChange={v => setForm(p => ({ ...p, location: v }))} placeholder="כתובת / Zoom / טלפון" style={{ width: "100%" }} /></Field></div>
@@ -298,7 +326,7 @@ export default function CalendarPage() {
 
         {isAdmin && (
           <Select value={filterUser} onChange={setFilterUser}
-            options={[{ value: "all", label: "כל הנציגים" }, ...ASSIGNEES.map(a => ({ value: a, label: a }))]}
+            options={[{ value: "all", label: "כל הנציגים" }, ...users.map(u => ({ value: u.name, label: u.name }))]}
             style={{ width: 150 }} />
         )}
 
@@ -315,6 +343,8 @@ export default function CalendarPage() {
           📅 {gcConnected ? "מחובר" : "חבר Google"}
         </button>
       </div>
+
+      {loadErr && <div style={{ padding: "6px 20px", background: "#FDECEC", color: "#C0392B", fontSize: 11, flexShrink: 0 }}>⚠ {loadErr}</div>}
 
       {/* Upcoming strip */}
       {viewMode !== "year" && (

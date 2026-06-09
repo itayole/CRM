@@ -145,6 +145,48 @@ export async function deleteTask(id: number): Promise<{ ok: boolean; message?: s
   return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת המשימה נכשלה" };
 }
 
+// ── Calendar events ──────────────────────────────────────────────────────────
+export interface CrmCalendarEvent {
+  id: number; title: string; date: string; time: string; endTime: string;
+  type: string; client: string; notes: string; location: string; color: string;
+  assignee: string; assigneeId: number;
+}
+interface ApiCalendarEvent {
+  id: number; title: string; date: string; time: string | null; endTime: string | null;
+  type: string; client: string | null; notes: string | null; location: string | null;
+  color: string | null; assigneeId: number; assignee: Named | null;
+}
+const toUIEvent = (e: ApiCalendarEvent): CrmCalendarEvent => ({
+  id: e.id, title: e.title, date: e.date ? String(e.date).slice(0, 10) : "",
+  time: e.time ?? "", endTime: e.endTime ?? "", type: e.type,
+  client: e.client ?? "", notes: e.notes ?? "", location: e.location ?? "", color: e.color ?? "",
+  assignee: e.assignee?.name ?? "", assigneeId: e.assigneeId,
+});
+export interface CalendarEventInput {
+  title: string; date: string; time?: string | null; endTime?: string | null;
+  type?: string; client?: string | null; notes?: string | null; location?: string | null;
+  color?: string | null; assigneeId?: number;
+}
+export async function fetchCalendarEvents(params: { assigneeId?: number } = {}): Promise<CrmCalendarEvent[]> {
+  const qs = new URLSearchParams();
+  if (params.assigneeId) qs.set("assigneeId", String(params.assigneeId));
+  const res = await fetch(`/api/calendar?${qs}`, { cache: "no-store" });
+  const body = (await jsonOrThrow(res)) as { data: ApiCalendarEvent[] };
+  return (body.data ?? []).map(toUIEvent);
+}
+export async function createCalendarEvent(input: CalendarEventInput): Promise<{ ok: boolean; event?: CrmCalendarEvent; message?: string }> {
+  const res = await fetch("/api/calendar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true, event: toUIEvent((await res.json()) as ApiCalendarEvent) };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת האירוע נכשלה" };
+}
+export async function deleteCalendarEvent(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/calendar/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת האירוע נכשלה" };
+}
+
 // ── Sales analytics (deal-centric) ──────────────────────────────────────────
 export interface SalesAnalytics {
   kpis: {
@@ -263,7 +305,7 @@ export async function deleteUser(id: number): Promise<{ ok: boolean; message?: s
 
 // ── Paginated list envelope ─────────────────────────────────────────────────
 export interface Page<T> { data: T[]; total: number; page: number; limit: number }
-interface Named { id: number; name: string }
+export interface Named { id: number; name: string }
 
 // ── Clients ─────────────────────────────────────────────────────────────────
 export interface CrmClientRow {
