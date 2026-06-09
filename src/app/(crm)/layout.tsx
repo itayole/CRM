@@ -21,7 +21,6 @@ const NAV = [
   { id: "integrations",icon: "🔌", label: "אינטגרציות",  href: "/integrations", adminOnly: true },
   { id: "import",      icon: "⬆", label: "שאיבת תוכן",  href: "/import", adminOnly: true },
   { id: "users",       icon: "⚙", label: "משתמשים",      href: "/users", adminOnly: true },
-  { id: "ai",          icon: "✦", label: "AI Assistant", href: "/ai" },
 ];
 
 export default function CRMLayout({ children }: { children: React.ReactNode }) {

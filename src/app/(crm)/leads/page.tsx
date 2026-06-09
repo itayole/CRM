@@ -295,7 +295,7 @@ export default function LeadsPage() {
           <div style={{ flex: 1, overflowY: "auto" }}>
             <div style={{ padding: "11px 15px", borderBottom: `1px solid ${BORDER}`, display: "flex", gap: 10, alignItems: "center" }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 10, color: MUTED, marginBottom: 3 }}>ציון AI</div>
+                <div style={{ fontSize: 10, color: MUTED, marginBottom: 3 }}>ציון</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <div style={{ flex: 1, height: 5, background: BORDER, borderRadius: 3, overflow: "hidden" }}>
                     <div style={{ width: `${sel.score}%`, height: "100%", background: sel.score >= 80 ? OK : sel.score >= 60 ? WARN : ERR, borderRadius: 3 }} />

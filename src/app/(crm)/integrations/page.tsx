@@ -221,7 +221,7 @@ export default function IntegrationsPage() {
           </div>
           <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 10, overflow: "hidden" }}>
             <div style={{ display: "grid", gridTemplateColumns: "80px 80px 1fr 60px 70px", gap: 8, padding: "8px 12px", background: SURF, borderBottom: `1px solid ${BORDER}`, fontSize: 11, fontWeight: 700, color: MUTED }}>
-              <div>זמן</div><div>מקור</div><div>שם / מייל</div><div>ציון AI</div><div>סטטוס</div>
+              <div>זמן</div><div>מקור</div><div>שם / מייל</div><div>ציון</div><div>סטטוס</div>
             </div>
             {filteredLogs.length === 0 && <div style={{ padding: 24, textAlign: "center", color: MUTED, fontSize: 12 }}>אין רשומות תואמות</div>}
             {filteredLogs.map((l, i) => {
