@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "node scripts/resolve-port.mjs migrate deploy",
     "db:push": "node scripts/resolve-port.mjs db push",
