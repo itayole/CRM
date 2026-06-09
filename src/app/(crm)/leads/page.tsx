@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Av, Bdg, Btn, Input, Select, Modal, FormRow, Field } from "@/components/ui";
-import { fetchLeads, createLead, deleteLead } from "@/lib/api";
+import { fetchLeads, createLead, deleteLead, fetchConfig, fetchActiveUsers, fetchClients, type AppConfig } from "@/lib/api";
 import { fmt } from "@/lib/utils";
 import { LEAD_STATUS } from "@/lib/mockData";
 import { NAVY, GOLD_L, BLUE, SURF, WHITE, MUTED, TEXT, BORDER, OK, WARN, ERR } from "@/lib/tokens";
@@ -23,8 +23,12 @@ export default function LeadsPage() {
   const [selCompany, setSelCompany] = useState<string | null>(null);
   const [dupWarning, setDupWarning] = useState<{ msg: string; match: Lead } | null>(null);
 
-  const emptyForm = { name: "", company: "", email: "", phone: "", status: "new", value: "", source: "", notes: "" };
+  const emptyForm = { name: "", company: "", email: "", phone: "", status: "", value: "", source: "", notes: "", assigneeId: "", clientId: "", researchTypeId: "", researchMethodId: "", productId: "" };
   const [form, setForm] = useState<typeof emptyForm>(emptyForm);
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
+  const [clientQuery, setClientQuery] = useState("");
+  const [clientResults, setClientResults] = useState<{ id: number; name: string }[]>([]);
 
   // ── Live data ─────────────────────────────────────────────────────────────
   const reload = useCallback(async () => {
@@ -40,6 +44,21 @@ export default function LeadsPage() {
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
+
+  // Load configurable lists + users for the form dropdowns.
+  useEffect(() => {
+    fetchConfig().then(setConfig).catch(() => {});
+    fetchActiveUsers().then(setUsers);
+  }, []);
+
+  // Debounced client search for linking a lead to an existing client.
+  useEffect(() => {
+    if (!clientQuery) { setClientResults([]); return; }
+    const t = setTimeout(async () => {
+      try { const r = await fetchClients({ q: clientQuery, limit: 8 }); setClientResults(r.data.map(c => ({ id: c.id, name: c.name }))); } catch { /* ignore */ }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [clientQuery]);
 
   // Client-side pre-check for instant feedback; the server is authoritative (409).
   const checkDuplicate = (f: typeof emptyForm, existing: Lead[]) => {
@@ -69,10 +88,15 @@ export default function LeadsPage() {
       company: form.company,
       email: form.email || undefined,
       phone: form.phone || undefined,
-      status: form.status as Lead["status"],
+      status: form.status || undefined,
       value: parseFloat(form.value) || 0,
       source: form.source || undefined,
       notes: form.notes || undefined,
+      assigneeId: form.assigneeId ? Number(form.assigneeId) : undefined,
+      clientId: form.clientId ? Number(form.clientId) : undefined,
+      researchTypeId: form.researchTypeId ? Number(form.researchTypeId) : undefined,
+      researchMethodId: form.researchMethodId ? Number(form.researchMethodId) : undefined,
+      productId: form.productId ? Number(form.productId) : undefined,
     });
     setSaving(false);
     if (res.status === "duplicate") {
@@ -147,17 +171,52 @@ export default function LeadsPage() {
           <FormRow>
             <Field label="שווי"><Input value={form.value} onChange={v => setForm(p => ({ ...p, value: v }))} placeholder="50000" type="number" style={{ width: "100%" }} /></Field>
             <Field label="מקור">
-              <Select value={form.source} onChange={v => setForm(p => ({ ...p, source: v }))} options={["", "LinkedIn", "Web Form", "Email", "Meta Ads", "WhatsApp", "המלצה"].map(x => ({ value: x, label: x || "בחר מקור" }))} style={{ width: "100%" }} />
+              <Select value={form.source} onChange={v => setForm(p => ({ ...p, source: v }))} options={[{ value: "", label: "בחר מקור" }, ...(config?.leadSources ?? []).map(o => ({ value: o.key, label: o.label }))]} style={{ width: "100%" }} />
             </Field>
           </FormRow>
           <FormRow>
             <Field label="סטטוס">
-              <Select value={form.status} onChange={v => setForm(p => ({ ...p, status: v }))} options={[{ value: "new", label: "חדש" }, { value: "contacted", label: "פנייה" }, { value: "qualified", label: "מוסמך" }, { value: "disqualified", label: "נפסל" }]} style={{ width: "100%" }} />
+              <Select value={form.status} onChange={v => setForm(p => ({ ...p, status: v }))} options={[{ value: "", label: "ברירת מחדל" }, ...(config?.leadStatuses ?? []).map(o => ({ value: o.key, label: o.label }))]} style={{ width: "100%" }} />
             </Field>
             <Field label="נציג אחראי">
-              <Input value="מוקצה אליי אוטומטית" onChange={() => {}} style={{ width: "100%" }} />
+              <Select value={form.assigneeId} onChange={v => setForm(p => ({ ...p, assigneeId: v }))} options={[{ value: "", label: "מוקצה אליי" }, ...users.map(u => ({ value: String(u.id), label: u.name }))]} style={{ width: "100%" }} />
             </Field>
           </FormRow>
+          <FormRow>
+            <Field label="סוג מחקר">
+              <Select value={form.researchTypeId} onChange={v => setForm(p => ({ ...p, researchTypeId: v }))} options={[{ value: "", label: "—" }, ...(config?.researchTypes ?? []).map(o => ({ value: String(o.id), label: o.name }))]} style={{ width: "100%" }} />
+            </Field>
+            <Field label="שיטת מחקר">
+              <Select value={form.researchMethodId} onChange={v => setForm(p => ({ ...p, researchMethodId: v }))} options={[{ value: "", label: "—" }, ...(config?.researchMethods ?? []).map(o => ({ value: String(o.id), label: o.name }))]} style={{ width: "100%" }} />
+            </Field>
+          </FormRow>
+          <div style={{ marginBottom: 10 }}>
+            <Field label="מוצר">
+              <Select value={form.productId} onChange={v => setForm(p => ({ ...p, productId: v }))} options={[{ value: "", label: "—" }, ...(config?.products ?? []).map(o => ({ value: String(o.id), label: o.name }))]} style={{ width: "100%" }} />
+            </Field>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <Field label="קישור ללקוח קיים (אופציונלי)">
+              {form.clientId ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                  <span style={{ background: "#E6F1FB", color: NAVY, padding: "4px 10px", borderRadius: 7, fontWeight: 700 }}>🏢 {form.company}</span>
+                  <button onClick={() => setForm(p => ({ ...p, clientId: "" }))} style={{ fontSize: 11, background: "none", border: "none", color: ERR, cursor: "pointer", fontFamily: "inherit" }}>נתק</button>
+                </div>
+              ) : (
+                <div style={{ position: "relative" }}>
+                  <Input value={clientQuery} onChange={setClientQuery} placeholder="הקלד שם לקוח לחיפוש וקישור..." style={{ width: "100%" }} />
+                  {clientResults.length > 0 && (
+                    <div style={{ position: "absolute", zIndex: 10, top: "100%", right: 0, left: 0, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 7, marginTop: 2, maxHeight: 160, overflowY: "auto", boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>
+                      {clientResults.map(c => (
+                        <div key={c.id} onClick={() => { setForm(p => ({ ...p, clientId: String(c.id), company: c.name })); setClientQuery(""); setClientResults([]); }}
+                          style={{ padding: "7px 11px", fontSize: 12, cursor: "pointer", borderBottom: `1px solid ${SURF}` }}>{c.name}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Field>
+          </div>
           <div style={{ marginBottom: 10 }}>
             <Field label="הערות">
               <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="הערות ראשוניות..." rows={2}

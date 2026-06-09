@@ -52,11 +52,31 @@ export interface LeadCreateInput {
   company: string;
   email?: string;
   phone?: string;
-  status?: Lead["status"];
+  status?: string;
   value?: number;
   source?: string;
   notes?: string;
   assigneeId?: number;
+  clientId?: number;
+  researchTypeId?: number;
+  researchMethodId?: number;
+  productId?: number;
+}
+
+// ── App config (taxonomies + lookups) ───────────────────────────────────────
+export interface ConfigItem { key: string; label: string; color: string | null }
+export interface AppConfig {
+  leadStatuses: ConfigItem[];
+  leadSources: ConfigItem[];
+  taskTypes: ConfigItem[];
+  projectStatuses: ConfigItem[];
+  researchTypes: Named[];
+  researchMethods: Named[];
+  products: Named[];
+}
+export async function fetchConfig(): Promise<AppConfig> {
+  const res = await fetch("/api/config", { cache: "no-store" });
+  return (await jsonOrThrow(res)) as AppConfig;
 }
 
 export type LeadCreateResult =

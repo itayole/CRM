@@ -9,11 +9,16 @@ const CreateLeadSchema = z.object({
   company: z.string().min(1).max(200),
   email: z.string().email().max(320).optional(),
   phone: z.string().max(30).optional(),
-  status: z.enum(["new", "contacted", "qualified", "disqualified"]).default("new"),
+  // status validated against configured lead_status options at runtime
+  status: z.string().max(50).optional(),
   value: z.number().min(0).default(0),
   source: z.string().max(50).optional(),
   notes: z.string().optional(),
   assigneeId: z.number().int().positive().optional(),
+  clientId: z.number().int().positive().optional(),
+  researchTypeId: z.number().int().positive().optional(),
+  researchMethodId: z.number().int().positive().optional(),
+  productId: z.number().int().positive().optional(),
 });
 
 function normalizePhone(phone?: string | null): string | null {
@@ -79,6 +84,19 @@ export async function POST(req: NextRequest) {
   // sales_rep can only create leads assigned to themselves
   const assigneeId = isAdmin ? (data.assigneeId ?? userId) : userId;
 
+  // Resolve/validate status against the configured lead_status options
+  const statuses = await prisma.configOption.findMany({
+    where: { category: "lead_status", active: true },
+    orderBy: { order: "asc" },
+    select: { key: true },
+  });
+  const validStatus = new Set(statuses.map(o => o.key));
+  let status = data.status;
+  if (status && !validStatus.has(status)) {
+    return NextResponse.json({ error: `Unknown status '${status}'` }, { status: 422 });
+  }
+  if (!status) status = statuses[0]?.key ?? "new";
+
   // Dedup check: phone OR company OR name
   const normalizedPhone = normalizePhone(data.phone);
   const existing = await prisma.lead.findFirst({
@@ -104,11 +122,15 @@ export async function POST(req: NextRequest) {
       company: data.company,
       email: data.email,
       phone: normalizedPhone ?? data.phone,
-      status: data.status,
+      status,
       value: data.value,
       source: data.source,
       notes: data.notes,
       assigneeId,
+      clientId: data.clientId,
+      researchTypeId: data.researchTypeId,
+      researchMethodId: data.researchMethodId,
+      productId: data.productId,
     },
   });
 
