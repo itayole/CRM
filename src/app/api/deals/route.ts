@@ -10,19 +10,26 @@ const CreateDealSchema = z.object({
   clientId: z.number().int().positive().optional(),
   value: z.number().min(0),
   probability: z.number().int().min(0).max(100).default(50),
-  stage: z
-    .enum(["lead", "discovery", "proposal", "negotiation", "closed_won"])
-    .default("lead"),
+  pipelineId: z.number().int().positive().optional(),
+  stageId: z.number().int().positive().optional(),
   closeDate: z.string().datetime().optional(),
   assigneeId: z.number().int().positive().optional(),
 });
+
+const dealInclude = {
+  assignee: { select: { id: true, name: true } },
+  client: { select: { id: true, name: true } },
+  pipeline: { select: { id: true, name: true } },
+  stage: { select: { id: true, label: true, color: true, probability: true } },
+} as const;
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = req.nextUrl;
-  const stage = searchParams.get("stage");
+  const stageId = searchParams.get("stageId");
+  const pipelineId = searchParams.get("pipelineId");
   const search = searchParams.get("q");
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
   const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") ?? 50)));
@@ -32,7 +39,8 @@ export async function GET(req: NextRequest) {
 
   const where = {
     ...(isAdmin ? {} : { assigneeId: userId }),
-    ...(stage ? { stage } : {}),
+    ...(stageId ? { stageId: Number(stageId) } : {}),
+    ...(pipelineId ? { pipelineId: Number(pipelineId) } : {}),
     ...(search
       ? {
           OR: [
@@ -46,10 +54,7 @@ export async function GET(req: NextRequest) {
   const [deals, total] = await Promise.all([
     prisma.deal.findMany({
       where,
-      include: {
-        assignee: { select: { id: true, name: true } },
-        client: { select: { id: true, name: true } },
-      },
+      include: dealInclude,
       orderBy: { value: "desc" },
       skip: (page - 1) * limit,
       take: limit,
@@ -75,6 +80,31 @@ export async function POST(req: NextRequest) {
   const isAdmin = session.user.role === "admin";
   const assigneeId = isAdmin ? (data.assigneeId ?? userId) : userId;
 
+  // Resolve the pipeline: explicit, else the default (or first active) pipeline.
+  let pipelineId = data.pipelineId;
+  if (!pipelineId) {
+    const def = await prisma.pipeline.findFirst({
+      where: { active: true },
+      orderBy: [{ isDefault: "desc" }, { order: "asc" }],
+    });
+    if (!def) return NextResponse.json({ error: "No pipeline configured" }, { status: 409 });
+    pipelineId = def.id;
+  }
+
+  // Resolve the stage: explicit (must belong to the pipeline), else the first stage.
+  let stageId = data.stageId;
+  if (stageId) {
+    const st = await prisma.pipelineStage.findFirst({ where: { id: stageId, pipelineId } });
+    if (!st) return NextResponse.json({ error: "Stage does not belong to the pipeline" }, { status: 422 });
+  } else {
+    const first = await prisma.pipelineStage.findFirst({
+      where: { pipelineId, active: true },
+      orderBy: { order: "asc" },
+    });
+    if (!first) return NextResponse.json({ error: "Pipeline has no stages" }, { status: 409 });
+    stageId = first.id;
+  }
+
   const deal = await prisma.deal.create({
     data: {
       title: data.title,
@@ -82,14 +112,12 @@ export async function POST(req: NextRequest) {
       clientId: data.clientId,
       value: data.value,
       probability: data.probability,
-      stage: data.stage,
+      pipelineId,
+      stageId,
       closeDate: data.closeDate ? new Date(data.closeDate) : undefined,
       assigneeId,
     },
-    include: {
-      assignee: { select: { id: true, name: true } },
-      client: { select: { id: true, name: true } },
-    },
+    include: dealInclude,
   });
 
   return NextResponse.json(deal, { status: 201 });

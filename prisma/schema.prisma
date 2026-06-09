@@ -49,23 +49,74 @@ model Lead {
 }
 
 model Deal {
-  id          Int       @id @default(autoincrement())
-  title       String    @db.NVarChar(300)
-  company     String    @db.NVarChar(200)
+  id          Int           @id @default(autoincrement())
+  title       String        @db.NVarChar(300)
+  company     String        @db.NVarChar(200)
   clientId    Int?
-  value       Decimal   @db.Decimal(18, 2)
+  value       Decimal       @db.Decimal(18, 2)
   probability Int
-  stage       String    @db.NVarChar(30)   // "lead"|"discovery"|"proposal"|"negotiation"|"closed_won"
+  pipelineId  Int
+  stageId     Int
   assigneeId  Int
   closeDate   DateTime?
-  health      Int       @default(60)
-  // NoAction on both sides breaks the dual cascade path: User→Deal (direct) vs User→Client→Deal (indirect)
-  assignee    User      @relation("DealAssignee", fields: [assigneeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  client      Client?   @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  health      Int           @default(60)
+  // NoAction throughout: avoids MSSQL multiple-cascade-path conflicts
+  // (Deal reaches Pipeline directly and indirectly via PipelineStage / Client).
+  assignee    User          @relation("DealAssignee", fields: [assigneeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  client      Client?       @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pipeline    Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  stage       PipelineStage @relation("DealStage", fields: [stageId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@index([stage])
+  @@index([pipelineId])
+  @@index([stageId])
   @@index([assigneeId])
   @@map("deals")
+}
+
+// ── Configuration: multiple sales pipelines, each with ordered stages ────────
+model Pipeline {
+  id        Int             @id @default(autoincrement())
+  name      String          @db.NVarChar(100)
+  isDefault Boolean         @default(false)
+  order     Int             @default(0)
+  active    Boolean         @default(true)
+  stages    PipelineStage[]
+  deals     Deal[]
+
+  @@map("pipelines")
+}
+
+model PipelineStage {
+  id          Int      @id @default(autoincrement())
+  pipelineId  Int
+  label       String   @db.NVarChar(100)
+  order       Int      @default(0)
+  color       String?  @db.NVarChar(7)
+  probability Int      @default(0)   // win probability % at this stage
+  isWon       Boolean  @default(false)
+  isLost      Boolean  @default(false)
+  active      Boolean  @default(true)
+  pipeline    Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  deals       Deal[]   @relation("DealStage")
+
+  @@index([pipelineId])
+  @@map("pipeline_stages")
+}
+
+// ── Configuration: generic admin-editable taxonomies ────────────────────────
+// category: "lead_status" | "lead_source" | "task_type" | "project_status"
+model ConfigOption {
+  id       Int     @id @default(autoincrement())
+  category String  @db.NVarChar(50)
+  key      String  @db.NVarChar(50)
+  label    String  @db.NVarChar(100)
+  color    String? @db.NVarChar(7)
+  order    Int     @default(0)
+  active   Boolean @default(true)
+
+  @@unique([category, key])
+  @@index([category])
+  @@map("config_options")
 }
 
 model Client {

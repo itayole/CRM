@@ -10,9 +10,8 @@ const UpdateDealSchema = z.object({
   clientId: z.number().int().positive().nullable().optional(),
   value: z.number().min(0).optional(),
   probability: z.number().int().min(0).max(100).optional(),
-  stage: z
-    .enum(["lead", "discovery", "proposal", "negotiation", "closed_won"])
-    .optional(),
+  pipelineId: z.number().int().positive().optional(),
+  stageId: z.number().int().positive().optional(),
   closeDate: z.string().datetime().nullable().optional(),
   health: z.number().int().min(0).max(100).optional(),
   assigneeId: z.number().int().positive().optional(),
@@ -27,6 +26,8 @@ async function getDealOrForbid(
     include: {
       assignee: { select: { id: true, name: true } },
       client: { select: { id: true, name: true } },
+      pipeline: { select: { id: true, name: true } },
+      stage: { select: { id: true, label: true, color: true, probability: true } },
     },
   });
   if (!deal) return null;
@@ -66,11 +67,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
-  const { closeDate, ...rest } = parsed.data;
+  const { closeDate, pipelineId, stageId, ...rest } = parsed.data;
+
+  // If moving to a stage, it must belong to the target pipeline.
+  if (stageId !== undefined) {
+    const targetPipeline = pipelineId ?? result.pipelineId;
+    const st = await prisma.pipelineStage.findFirst({ where: { id: stageId, pipelineId: targetPipeline } });
+    if (!st) return NextResponse.json({ error: "Stage does not belong to the pipeline" }, { status: 422 });
+  }
+
   const updated = await prisma.deal.update({
     where: { id },
     data: {
       ...rest,
+      ...(pipelineId !== undefined ? { pipelineId } : {}),
+      ...(stageId !== undefined ? { stageId } : {}),
       ...(closeDate !== undefined
         ? { closeDate: closeDate ? new Date(closeDate) : null }
         : {}),
@@ -78,6 +89,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     include: {
       assignee: { select: { id: true, name: true } },
       client: { select: { id: true, name: true } },
+      pipeline: { select: { id: true, name: true } },
+      stage: { select: { id: true, label: true, color: true, probability: true } },
     },
   });
 
