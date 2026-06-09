@@ -79,6 +79,21 @@ export async function fetchConfig(): Promise<AppConfig> {
   return (await jsonOrThrow(res)) as AppConfig;
 }
 
+// ── Dashboard stats ─────────────────────────────────────────────────────────
+export interface DashboardStats {
+  counts: { clients: number; projects: number; contacts: number; leads: number; deals: number; users: number };
+  leadsByStatus: { status: string; count: number }[];
+  projectsByMethodology: { methodology: string; count: number }[];
+  recentProjects: { id: number; projectNo: number | null; name: string; client: string | null; statusText: string | null; createdAt: string | null }[];
+  topClients: { id: number; name: string; projectCount: number }[];
+  totalProjectBilling: number;
+  deals: { count: number; value: number; won: number; winRate: number };
+}
+export async function fetchStats(): Promise<DashboardStats> {
+  const res = await fetch("/api/stats", { cache: "no-store" });
+  return (await jsonOrThrow(res)) as DashboardStats;
+}
+
 export type LeadCreateResult =
   | { status: "created"; lead: Lead }
   | { status: "duplicate"; existing: Lead }
