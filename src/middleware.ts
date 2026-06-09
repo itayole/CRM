@@ -4,7 +4,7 @@ import { withAuth } from "next-auth/middleware";
 // sections additionally require role === "admin". API routes are excluded here
 // and enforce their own auth via getServerSession (so they return JSON 401s
 // rather than HTML redirects).
-const ADMIN_PATHS = ["/users", "/integrations", "/import", "/automations"];
+const ADMIN_PATHS = ["/users", "/integrations", "/import", "/automations", "/settings"];
 
 export default withAuth({
   pages: { signIn: "/login" },

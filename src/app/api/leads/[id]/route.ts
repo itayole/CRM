@@ -15,6 +15,8 @@ const UpdateLeadSchema = z.object({
   source: z.string().max(50).nullable().optional(),
   notes: z.string().nullable().optional(),
   assigneeId: z.number().int().positive().optional(),
+  clientId: z.number().int().positive().nullable().optional(),
+  contactId: z.number().int().positive().nullable().optional(),
   activity: z.string().optional(),
 });
 
@@ -57,7 +59,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
-  const updated = await prisma.lead.update({ where: { id }, data: parsed.data });
+  const updated = await prisma.lead.update({
+    where: { id },
+    data: parsed.data,
+    include: { assignee: { select: { id: true, name: true } }, contact: { select: { id: true, fullName: true } } },
+  });
   return NextResponse.json(updated);
 }
 

@@ -2,13 +2,15 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Av, Stat, Input, Btn, Select, Modal, FormRow, Field } from "@/components/ui";
-import { fetchClients, updateClient, fetchActiveUsers, type CrmClientRow } from "@/lib/api";
+import { fetchClients, updateClient, createClient, deleteClient, fetchActiveUsers, type CrmClientRow } from "@/lib/api";
+import { useApp } from "@/context/AppContext";
 import { NAVY, GOLD, GOLD_L, WHITE, MUTED, TEXT, BORDER, OK, ERR, SURF } from "@/lib/tokens";
 
 type Named = { id: number; name: string };
 const emptyEdit = { name: "", industry: "", email: "", phone: "", address: "", website: "", status: "", assigneeId: "", notes: "" };
 
 export default function ClientsPage() {
+  const { isAdmin } = useApp();
   const [rows, setRows] = useState<CrmClientRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -18,6 +20,7 @@ export default function ClientsPage() {
   const [selected, setSelected] = useState<CrmClientRow | null>(null);
   const [users, setUsers] = useState<Named[]>([]);
   const [editId, setEditId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
   const [editForm, setEditForm] = useState(emptyEdit);
   const [editErr, setEditErr] = useState("");
   const [saving, setSaving] = useState(false);
@@ -43,7 +46,15 @@ export default function ClientsPage() {
 
   const canLoadMore = rows.length < total;
 
+  const openCreate = () => {
+    setCreating(true);
+    setEditId(null);
+    setEditForm(emptyEdit);
+    setEditErr("");
+  };
+
   const openEdit = (c: CrmClientRow) => {
+    setCreating(false);
     setEditId(c.id);
     setEditForm({
       name: c.name, industry: c.industry ?? "", email: c.email ?? "", phone: c.phone ?? "",
@@ -52,30 +63,53 @@ export default function ClientsPage() {
     setEditErr("");
   };
 
-  const saveEdit = async () => {
+  const closeModal = () => { setEditId(null); setCreating(false); };
+
+  const remove = async (c: CrmClientRow) => {
+    if (!window.confirm(`למחוק את הלקוח «${c.name}»? פעולה זו אינה הפיכה.`)) return;
+    const res = await deleteClient(c.id);
+    if (!res.ok) { alert(res.message ?? "מחיקת הלקוח נכשלה"); return; }
+    setSelected(null);
+    load(1, q, false);
+  };
+
+  const save = async () => {
     if (!editForm.name) { setEditErr("שם הוא שדה חובה"); return; }
     setSaving(true); setEditErr("");
-    const res = await updateClient(editId!, {
-      name: editForm.name,
-      industry: editForm.industry || null,
-      email: editForm.email || null,
-      phone: editForm.phone || null,
-      address: editForm.address || null,
-      website: editForm.website || null,
-      ...(editForm.status === "active" || editForm.status === "prospect" ? { status: editForm.status } : {}),
-      ...(editForm.assigneeId ? { assigneeId: Number(editForm.assigneeId) } : {}),
-      notes: editForm.notes || null,
-    });
+    const status = editForm.status === "active" || editForm.status === "prospect" ? editForm.status : undefined;
+    const assigneeId = editForm.assigneeId ? Number(editForm.assigneeId) : undefined;
+    const res = creating
+      ? await createClient({
+          name: editForm.name,
+          industry: editForm.industry || undefined,
+          email: editForm.email || undefined,
+          phone: editForm.phone || undefined,
+          address: editForm.address || undefined,
+          website: editForm.website || undefined,
+          status, assigneeId,
+          notes: editForm.notes || undefined,
+        })
+      : await updateClient(editId!, {
+          name: editForm.name,
+          industry: editForm.industry || null,
+          email: editForm.email || null,
+          phone: editForm.phone || null,
+          address: editForm.address || null,
+          website: editForm.website || null,
+          ...(status ? { status } : {}),
+          ...(assigneeId ? { assigneeId } : {}),
+          notes: editForm.notes || null,
+        });
     setSaving(false);
-    if (!res.ok) { setEditErr(res.message ?? "העדכון נכשל"); return; }
-    setEditId(null);
+    if (!res.ok) { setEditErr(res.message ?? "השמירה נכשלה"); return; }
+    closeModal();
     load(1, q, false);
   };
 
   return (
     <div style={{ padding: "16px 20px", display: "flex", gap: 14, height: "100%", overflow: "hidden" }}>
-      {editId !== null && (
-        <Modal title="✎ עריכת לקוח" onClose={() => setEditId(null)} width={560}>
+      {(editId !== null || creating) && (
+        <Modal title={creating ? "➕ לקוח חדש" : "✎ עריכת לקוח"} onClose={closeModal} width={560}>
           <FormRow>
             <Field label="שם חברה *"><Input value={editForm.name} onChange={v => setEditForm(p => ({ ...p, name: v }))} style={{ width: "100%" }} /></Field>
             <Field label="תעשייה"><Input value={editForm.industry} onChange={v => setEditForm(p => ({ ...p, industry: v }))} style={{ width: "100%" }} /></Field>
@@ -103,8 +137,8 @@ export default function ClientsPage() {
           </div>
           {editErr && <div style={{ fontSize: 12, color: ERR, marginBottom: 10 }}>{editErr}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={saveEdit} disabled={saving}>{saving ? "שומר…" : "✓ שמור"}</Btn>
-            <Btn onClick={() => setEditId(null)} variant="secondary">ביטול</Btn>
+            <Btn onClick={save} disabled={saving}>{saving ? "שומר…" : creating ? "➕ צור לקוח" : "✓ שמור"}</Btn>
+            <Btn onClick={closeModal} variant="secondary">ביטול</Btn>
           </div>
         </Modal>
       )}
@@ -115,6 +149,7 @@ export default function ClientsPage() {
             <div style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>🏢 לקוחות</div>
             <div style={{ fontSize: 11, color: MUTED, marginTop: 1 }}>{total.toLocaleString()} לקוחות · מוצגים {rows.length}</div>
           </div>
+          <Btn onClick={openCreate}>+ לקוח חדש</Btn>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
@@ -166,7 +201,10 @@ export default function ClientsPage() {
             <Av name={selected.name} size={48} color={NAVY} />
             <div style={{ fontWeight: 800, fontSize: 14, color: TEXT, marginTop: 8 }}>{selected.name}</div>
             <div style={{ fontSize: 11, color: MUTED }}>{selected.industry || "—"}</div>
-            <button onClick={() => openEdit(selected)} style={{ marginTop: 8, fontSize: 11, padding: "4px 12px", border: `1px solid ${BORDER}`, borderRadius: 6, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך פרטים</button>
+            <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 8 }}>
+              <button onClick={() => openEdit(selected)} style={{ fontSize: 11, padding: "4px 12px", border: `1px solid ${BORDER}`, borderRadius: 6, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך פרטים</button>
+              {isAdmin && <button onClick={() => remove(selected)} style={{ fontSize: 11, padding: "4px 12px", border: `1px solid ${BORDER}`, borderRadius: 6, background: WHITE, cursor: "pointer", color: ERR, fontFamily: "inherit" }}>🗑 מחק</button>}
+            </div>
           </div>
           <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 8 }}>פרטים</div>

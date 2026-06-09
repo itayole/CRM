@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useApp } from "@/context/AppContext";
+import { useState, useEffect } from "react";
 import { Stat, Btn, Input, Select, Modal, FormRow, Field, PageShell } from "@/components/ui";
+import { fetchTasks, createTask, updateTask, deleteTask, type CrmTask } from "@/lib/api";
 import { NAVY, WHITE, MUTED, TEXT, BORDER, OK, WARN, ERR } from "@/lib/tokens";
 
 const ICONS: Record<string, string> = { call: "📞", email: "✉", meeting: "🤝", proposal: "📋", followup: "🔁", other: "📌" };
@@ -12,19 +12,55 @@ const PRIO: Record<string, { label: string; color: string }> = {
   low:    { label: "🟢 נמוכה",   color: OK },
 };
 
+const emptyForm = { desc: "", type: "call", priority: "medium" as const, date: "", time: "09:00", client: "", notes: "" };
+
 export default function TasksPage() {
-  const { visibleTasks: tasks, setTasks } = useApp();
+  const [tasks, setTasks] = useState<CrmTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
   const [filter, setFilter] = useState("all");
   const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({ desc: "", type: "call", priority: "medium", date: "", time: "09:00", client: "", notes: "" });
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<typeof emptyForm>({ ...emptyForm });
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const save = () => {
+  useEffect(() => {
+    fetchTasks()
+      .then(setTasks)
+      .catch(e => setErr(e instanceof Error ? e.message : "טעינת המשימות נכשלה"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
     if (!form.desc || !form.date) { alert("תיאור ותאריך הם שדות חובה"); return; }
-    setTasks(p => [{ ...form, id: Date.now(), status: "open", created: today } as any, ...p]);
+    setSaving(true);
+    const res = await createTask({
+      desc: form.desc, type: form.type, priority: form.priority,
+      date: form.date, time: form.time || null, client: form.client || null, notes: form.notes || null,
+    });
+    setSaving(false);
+    if (!res.ok || !res.task) { alert(res.message || "שמירת המשימה נכשלה"); return; }
+    setTasks(p => [res.task!, ...p]);
     setModal(false);
-    setForm({ desc: "", type: "call", priority: "medium", date: "", time: "09:00", client: "", notes: "" });
+    setForm({ ...emptyForm });
+  };
+
+  const toggle = async (t: CrmTask) => {
+    const next = t.status === "done" ? "open" : "done";
+    setTasks(p => p.map(x => x.id === t.id ? { ...x, status: next } : x)); // optimistic
+    const res = await updateTask(t.id, { status: next });
+    if (!res.ok) {
+      setTasks(p => p.map(x => x.id === t.id ? { ...x, status: t.status } : x)); // revert
+      alert(res.message || "עדכון המשימה נכשל");
+    }
+  };
+
+  const remove = async (t: CrmTask) => {
+    const prev = tasks;
+    setTasks(p => p.filter(x => x.id !== t.id)); // optimistic
+    const res = await deleteTask(t.id);
+    if (!res.ok) { setTasks(prev); alert(res.message || "מחיקת המשימה נכשלה"); }
   };
 
   const filtered = tasks.filter(t => {
@@ -55,7 +91,7 @@ export default function TasksPage() {
               <Select value={form.type} onChange={v => setForm(p => ({ ...p, type: v }))} options={[{ value: "call", label: "📞 שיחה" }, { value: "email", label: "✉ מייל" }, { value: "meeting", label: "🤝 פגישה" }, { value: "proposal", label: "📋 הצעה" }, { value: "followup", label: "🔁 Follow-up" }, { value: "other", label: "📌 אחר" }]} style={{ width: "100%" }} />
             </Field>
             <Field label="עדיפות">
-              <Select value={form.priority} onChange={v => setForm(p => ({ ...p, priority: v }))} options={[{ value: "high", label: "🔴 גבוהה" }, { value: "medium", label: "🟡 בינונית" }, { value: "low", label: "🟢 נמוכה" }]} style={{ width: "100%" }} />
+              <Select value={form.priority} onChange={v => setForm(p => ({ ...p, priority: v as typeof p.priority }))} options={[{ value: "high", label: "🔴 גבוהה" }, { value: "medium", label: "🟡 בינונית" }, { value: "low", label: "🟢 נמוכה" }]} style={{ width: "100%" }} />
             </Field>
           </FormRow>
           <FormRow>
@@ -67,7 +103,7 @@ export default function TasksPage() {
             <Field label="הערות"><Input value={form.notes} onChange={v => setForm(p => ({ ...p, notes: v }))} placeholder="הערות..." style={{ width: "100%" }} /></Field>
           </FormRow>
           <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-            <Btn onClick={save}>✓ שמור</Btn>
+            <Btn onClick={save} disabled={saving}>{saving ? "שומר…" : "✓ שמור"}</Btn>
             <Btn onClick={() => setModal(false)} variant="secondary">ביטול</Btn>
           </div>
         </Modal>
@@ -98,7 +134,9 @@ export default function TasksPage() {
         ))}
       </div>
 
-      {filtered.length === 0 && <div style={{ textAlign: "center", padding: 32, color: MUTED }}>אין משימות תואמות</div>}
+      {err && <div style={{ color: ERR, fontSize: 12, marginBottom: 10 }}>⚠ {err}</div>}
+      {loading && <div style={{ textAlign: "center", padding: 32, color: MUTED }}>טוען משימות…</div>}
+      {!loading && !err && filtered.length === 0 && <div style={{ textAlign: "center", padding: 32, color: MUTED }}>אין משימות תואמות</div>}
 
       {filtered.map(t => {
         const pr = PRIO[t.priority] || PRIO.medium;
@@ -107,7 +145,7 @@ export default function TasksPage() {
         return (
           <div key={t.id} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 9, padding: 12, marginBottom: 8, borderRight: `4px solid ${t.status === "done" ? BORDER : pr.color}` }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-              <div onClick={() => setTasks(p => p.map(x => x.id === t.id ? { ...x, status: x.status === "done" ? "open" : "done" } as any : x))}
+              <div onClick={() => toggle(t)}
                 style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${t.status === "done" ? OK : BORDER}`, background: t.status === "done" ? OK : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, marginTop: 1 }}>
                 {t.status === "done" && <span style={{ color: WHITE, fontSize: 10 }}>✓</span>}
               </div>
@@ -125,7 +163,7 @@ export default function TasksPage() {
                   {t.notes && <span style={{ fontSize: 10, color: MUTED }}>📝 {t.notes}</span>}
                 </div>
               </div>
-              <button onClick={() => setTasks(p => p.filter(x => x.id !== t.id))}
+              <button onClick={() => remove(t)}
                 style={{ fontSize: 10, padding: "3px 6px", border: `1px solid ${BORDER}`, borderRadius: 5, background: WHITE, cursor: "pointer", color: ERR, flexShrink: 0, fontFamily: "inherit" }}>🗑</button>
             </div>
           </div>

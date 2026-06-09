@@ -18,6 +18,9 @@ interface ApiLead {
   created: string | null;
   activity: string | null;
   assignee?: { id: number; name: string } | null;
+  clientId?: number | null;
+  contactId?: number | null;
+  contact?: { id: number; fullName: string | null } | null;
 }
 
 function parseActivity(raw: string | null): ActivityEntry[] {
@@ -44,6 +47,9 @@ export function toUILead(l: ApiLead): Lead {
     assignee: l.assignee?.name ?? "",
     notes: l.notes ?? "",
     activity: parseActivity(l.activity),
+    clientId: l.clientId ?? null,
+    contactId: l.contactId ?? null,
+    contactName: l.contact?.fullName ?? "",
   };
 }
 
@@ -58,6 +64,7 @@ export interface LeadCreateInput {
   notes?: string;
   assigneeId?: number;
   clientId?: number;
+  contactId?: number;
   researchTypeId?: number;
   researchMethodId?: number;
   productId?: number;
@@ -82,6 +89,56 @@ export async function fetchConfig(): Promise<AppConfig> {
   return (await jsonOrThrow(res)) as AppConfig;
 }
 
+// ── Config administration (Settings page, admin-only) ───────────────────────
+export interface ConfigOptionRow { id: number; category: string; key: string; label: string; color: string | null; order: number; active: boolean }
+const msgOr = async (res: Response, fallback: string) => { const b = await res.json().catch(() => ({})); return typeof b?.error === "string" ? b.error : fallback; };
+
+export async function fetchConfigOptions(): Promise<ConfigOptionRow[]> {
+  const res = await fetch("/api/config/options", { cache: "no-store" });
+  const body = (await jsonOrThrow(res)) as { data: ConfigOptionRow[] };
+  return body.data ?? [];
+}
+export async function createConfigOption(input: { category: string; label: string; color?: string | null }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/config/options", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true };
+  if (res.status === 409) return { ok: false, message: "מפתח כבר קיים בקטגוריה זו" };
+  return { ok: false, message: await msgOr(res, "הוספת הפריט נכשלה") };
+}
+export async function updateConfigOption(id: number, patch: { label?: string; color?: string | null; order?: number; active?: boolean }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/options/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "עדכון הפריט נכשל") };
+}
+export async function deleteConfigOption(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/options/${id}`, { method: "DELETE" });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "מחיקת הפריט נכשלה") };
+}
+
+export async function createPipeline(input: { name: string }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/config/pipelines", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "הוספת הצינור נכשלה") };
+}
+export async function updatePipeline(id: number, patch: { name?: string; isDefault?: boolean; active?: boolean; order?: number }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/pipelines/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "עדכון הצינור נכשל") };
+}
+export async function deletePipeline(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/pipelines/${id}`, { method: "DELETE" });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "מחיקת הצינור נכשלה") };
+}
+
+export async function createStage(input: { pipelineId: number; label: string; color?: string | null; probability?: number; isWon?: boolean; isLost?: boolean }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/config/stages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "הוספת השלב נכשלה") };
+}
+export async function updateStage(id: number, patch: { label?: string; color?: string | null; probability?: number; isWon?: boolean; isLost?: boolean; order?: number; active?: boolean }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/stages/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "עדכון השלב נכשל") };
+}
+export async function deleteStage(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/stages/${id}`, { method: "DELETE" });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "מחיקת השלב נכשלה") };
+}
+
 // ── Dashboard stats ─────────────────────────────────────────────────────────
 export interface DashboardStats {
   counts: { clients: number; projects: number; contacts: number; leads: number; deals: number; users: number };
@@ -95,6 +152,122 @@ export interface DashboardStats {
 export async function fetchStats(): Promise<DashboardStats> {
   const res = await fetch("/api/stats", { cache: "no-store" });
   return (await jsonOrThrow(res)) as DashboardStats;
+}
+
+// ── Tasks ────────────────────────────────────────────────────────────────────
+export interface CrmTask {
+  id: number; desc: string; type: string; priority: "high" | "medium" | "low";
+  date: string; time: string | null; client: string | null; notes: string | null;
+  status: "open" | "done"; assignee: Named | null;
+}
+interface ApiTask {
+  id: number; desc: string; type: string; priority: "high" | "medium" | "low";
+  date: string; time: string | null; client: string | null; notes: string | null;
+  status: "open" | "done"; assignee: Named | null;
+}
+const toUITask = (t: ApiTask): CrmTask => ({
+  id: t.id, desc: t.desc, type: t.type, priority: t.priority,
+  date: t.date ? String(t.date).slice(0, 10) : "", time: t.time, client: t.client,
+  notes: t.notes, status: t.status, assignee: t.assignee ?? null,
+});
+export interface TaskInput {
+  desc: string; type?: string; priority?: "high" | "medium" | "low";
+  date: string; time?: string | null; client?: string | null; notes?: string | null;
+  status?: "open" | "done"; assigneeId?: number;
+}
+export async function fetchTasks(params: { status?: string; q?: string } = {}): Promise<CrmTask[]> {
+  const qs = new URLSearchParams();
+  if (params.status && params.status !== "all") qs.set("status", params.status);
+  if (params.q) qs.set("q", params.q);
+  const res = await fetch(`/api/tasks?${qs}`, { cache: "no-store" });
+  const body = (await jsonOrThrow(res)) as { data: ApiTask[] };
+  return (body.data ?? []).map(toUITask);
+}
+export async function createTask(input: TaskInput): Promise<{ ok: boolean; task?: CrmTask; message?: string }> {
+  const res = await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true, task: toUITask((await res.json()) as ApiTask) };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת המשימה נכשלה" };
+}
+export async function updateTask(id: number, patch: Partial<TaskInput>): Promise<{ ok: boolean; task?: CrmTask; message?: string }> {
+  const res = await fetch(`/api/tasks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  if (res.ok) return { ok: true, task: toUITask((await res.json()) as ApiTask) };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "עדכון המשימה נכשל" };
+}
+export async function deleteTask(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת המשימה נכשלה" };
+}
+
+// ── Calendar events ──────────────────────────────────────────────────────────
+export interface CrmCalendarEvent {
+  id: number; title: string; date: string; time: string; endTime: string;
+  type: string; client: string; notes: string; location: string; color: string;
+  assignee: string; assigneeId: number;
+}
+interface ApiCalendarEvent {
+  id: number; title: string; date: string; time: string | null; endTime: string | null;
+  type: string; client: string | null; notes: string | null; location: string | null;
+  color: string | null; assigneeId: number; assignee: Named | null;
+}
+const toUIEvent = (e: ApiCalendarEvent): CrmCalendarEvent => ({
+  id: e.id, title: e.title, date: e.date ? String(e.date).slice(0, 10) : "",
+  time: e.time ?? "", endTime: e.endTime ?? "", type: e.type,
+  client: e.client ?? "", notes: e.notes ?? "", location: e.location ?? "", color: e.color ?? "",
+  assignee: e.assignee?.name ?? "", assigneeId: e.assigneeId,
+});
+export interface CalendarEventInput {
+  title: string; date: string; time?: string | null; endTime?: string | null;
+  type?: string; client?: string | null; notes?: string | null; location?: string | null;
+  color?: string | null; assigneeId?: number;
+}
+export async function fetchCalendarEvents(params: { assigneeId?: number } = {}): Promise<CrmCalendarEvent[]> {
+  const qs = new URLSearchParams();
+  if (params.assigneeId) qs.set("assigneeId", String(params.assigneeId));
+  const res = await fetch(`/api/calendar?${qs}`, { cache: "no-store" });
+  const body = (await jsonOrThrow(res)) as { data: ApiCalendarEvent[] };
+  return (body.data ?? []).map(toUIEvent);
+}
+export async function createCalendarEvent(input: CalendarEventInput): Promise<{ ok: boolean; event?: CrmCalendarEvent; message?: string }> {
+  const res = await fetch("/api/calendar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true, event: toUIEvent((await res.json()) as ApiCalendarEvent) };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת האירוע נכשלה" };
+}
+export async function updateCalendarEvent(id: number, patch: Partial<CalendarEventInput>): Promise<{ ok: boolean; event?: CrmCalendarEvent; message?: string }> {
+  const res = await fetch(`/api/calendar/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  if (res.ok) return { ok: true, event: toUIEvent((await res.json()) as ApiCalendarEvent) };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "עדכון האירוע נכשל" };
+}
+export async function deleteCalendarEvent(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/calendar/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת האירוע נכשלה" };
+}
+
+// ── Sales analytics (deal-centric) ──────────────────────────────────────────
+export interface SalesAnalytics {
+  kpis: {
+    totalCount: number; openCount: number; wonCount: number; lostCount: number;
+    openValue: number; wonValue: number; totalValue: number; avgDealValue: number; winRate: number;
+  };
+  byStage: { stageId: number; label: string; color: string | null; count: number; value: number }[];
+  teamPerformance: { assigneeId: number; name: string; totalValue: number; wonValue: number; count: number }[];
+  activeDeals: {
+    id: number; title: string; company: string; value: number; probability: number; health: number;
+    closeDate: string | null; stageLabel: string | null; stageColor: string | null; assignee: string | null;
+  }[];
+}
+export async function fetchAnalytics(params: { pipelineId?: number } = {}): Promise<SalesAnalytics> {
+  const qs = new URLSearchParams();
+  if (params.pipelineId) qs.set("pipelineId", String(params.pipelineId));
+  const res = await fetch(`/api/analytics?${qs}`, { cache: "no-store" });
+  return (await jsonOrThrow(res)) as SalesAnalytics;
 }
 
 export type LeadCreateResult =
@@ -136,6 +309,18 @@ export async function createLead(input: LeadCreateInput): Promise<LeadCreateResu
 export async function deleteLead(id: number): Promise<boolean> {
   const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
   return res.ok;
+}
+
+export interface LeadUpdateInput {
+  name?: string; company?: string; email?: string | null; phone?: string | null;
+  status?: string; value?: number; source?: string | null; notes?: string | null;
+  assigneeId?: number; clientId?: number | null; contactId?: number | null;
+}
+export async function updateLead(id: number, patch: LeadUpdateInput): Promise<{ ok: boolean; lead?: Lead; message?: string }> {
+  const res = await fetch(`/api/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  if (res.ok) return { ok: true, lead: toUILead((await res.json()) as ApiLead) };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "עדכון הליד נכשל" };
 }
 
 // ── Users (admin) ───────────────────────────────────────────────────────────
@@ -195,7 +380,7 @@ export async function deleteUser(id: number): Promise<{ ok: boolean; message?: s
 
 // ── Paginated list envelope ─────────────────────────────────────────────────
 export interface Page<T> { data: T[]; total: number; page: number; limit: number }
-interface Named { id: number; name: string }
+export interface Named { id: number; name: string }
 
 // ── Clients ─────────────────────────────────────────────────────────────────
 export interface CrmClientRow {
@@ -214,6 +399,24 @@ const toUIClient = (c: ApiClient): CrmClientRow => ({
   projectCount: c._count?.projects ?? 0, contactCount: c._count?.contactPeople ?? 0, dealCount: c._count?.deals ?? 0,
 });
 
+export interface ClientCreateInput {
+  name: string; industry?: string; email?: string; phone?: string; address?: string;
+  website?: string; size?: string; status?: "active" | "prospect"; notes?: string; assigneeId?: number;
+}
+export async function createClient(input: ClientCreateInput): Promise<{ ok: boolean; id?: number; message?: string; existingId?: number }> {
+  const res = await fetch("/api/clients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) { const c = (await res.json()) as { id: number }; return { ok: true, id: c.id }; }
+  const b = await res.json().catch(() => ({}));
+  if (res.status === 409) return { ok: false, message: "לקוח עם שם זה כבר קיים במערכת", existingId: typeof b?.existingId === "number" ? b.existingId : undefined };
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת הלקוח נכשלה" };
+}
+export async function deleteClient(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/clients/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת הלקוח נכשלה" };
+}
+
 export async function fetchClients(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmClientRow>> {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
@@ -227,20 +430,32 @@ export async function fetchClients(params: { q?: string; page?: number; limit?: 
 // ── Projects ────────────────────────────────────────────────────────────────
 export interface CrmProjectRow {
   id: number; projectNo: number | null; name: string; clientName: string | null; client: Named | null;
-  assignee: Named | null; state: string | null; statusText: string | null; methodology: string | null;
+  assignee: Named | null; contact: ContactRef | null; state: string | null; statusText: string | null; methodology: string | null;
   model: string | null; billing: number | null; sourceCreatedAt: string | null; lastUpdated: string | null;
 }
+interface ContactRef { id: number; fullName: string | null }
 interface ApiProject {
   id: number; projectNo: number | null; name: string; clientName: string | null; client: Named | null;
-  assignee: Named | null; state: string | null; statusText: string | null; methodology: string | null;
+  assignee: Named | null; contact: ContactRef | null; state: string | null; statusText: string | null; methodology: string | null;
   model: string | null; billing: string | number | null; sourceCreatedAt: string | null; lastUpdated: string | null;
 }
 const toUIProject = (p: ApiProject): CrmProjectRow => ({
   id: p.id, projectNo: p.projectNo, name: p.name, clientName: p.clientName, client: p.client ?? null,
-  assignee: p.assignee ?? null, state: p.state, statusText: p.statusText, methodology: p.methodology,
+  assignee: p.assignee ?? null, contact: p.contact ?? null, state: p.state, statusText: p.statusText, methodology: p.methodology,
   model: p.model, billing: p.billing == null ? null : Number(p.billing),
   sourceCreatedAt: p.sourceCreatedAt, lastUpdated: p.lastUpdated,
 });
+
+export interface ProjectCreateInput {
+  name: string; clientId?: number; contactId?: number; assigneeId?: number;
+  model?: string; methodology?: string; statusText?: string; billing?: number;
+}
+export async function createProject(input: ProjectCreateInput): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת הפרויקט נכשלה" };
+}
 
 export async function fetchProjects(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmProjectRow>> {
   const qs = new URLSearchParams();
@@ -266,10 +481,16 @@ export interface ClientPatch {
 export const updateClient = (id: number, patch: ClientPatch) => patchOk(`/api/clients/${id}`, patch);
 
 export interface ProjectPatch {
-  name?: string; clientId?: number | null; assigneeId?: number | null;
+  name?: string; clientId?: number | null; contactId?: number | null; assigneeId?: number | null;
   model?: string | null; methodology?: string | null; state?: string | null; statusText?: string | null; billing?: number | null;
 }
 export const updateProject = (id: number, patch: ProjectPatch) => patchOk(`/api/projects/${id}`, patch);
+export async function deleteProject(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת הפרויקט נכשלה" };
+}
 
 // ── Deals (pipeline) ────────────────────────────────────────────────────────
 export interface CrmDeal {
@@ -303,6 +524,12 @@ export async function createDeal(input: DealInput): Promise<{ ok: boolean; messa
   return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת העסקה נכשלה" };
 }
 export const updateDealStage = (id: number, stageId: number) => patchOk(`/api/deals/${id}`, { stageId });
+export async function deleteDeal(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/deals/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת העסקה נכשלה" };
+}
 
 // ── Contacts ────────────────────────────────────────────────────────────────
 export interface CrmContactRow {
@@ -315,9 +542,10 @@ export interface ContactInput {
   companyName?: string | null; category?: string | null; newsletter?: boolean; status?: string | null;
   clientId?: number | null; accountManagerId?: number | null;
 }
-export async function fetchContacts(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmContactRow>> {
+export async function fetchContacts(params: { q?: string; clientId?: number; page?: number; limit?: number } = {}): Promise<Page<CrmContactRow>> {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
+  if (params.clientId) qs.set("clientId", String(params.clientId));
   qs.set("page", String(params.page ?? 1));
   qs.set("limit", String(params.limit ?? 60));
   const res = await fetch(`/api/contacts?${qs}`, { cache: "no-store" });

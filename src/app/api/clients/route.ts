@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 
 const CreateClientSchema = z.object({
   name: z.string().min(1).max(200),
-  industry: z.string().min(1).max(50),
+  industry: z.string().max(50).optional(),
   email: z.string().email().max(320).optional(),
   phone: z.string().max(30).optional(),
   address: z.string().max(300).optional(),
@@ -76,6 +76,12 @@ export async function POST(req: NextRequest) {
   const userId = Number(session.user.id);
   const isAdmin = session.user.role === "admin";
   const assigneeId = isAdmin ? (data.assigneeId ?? userId) : userId;
+
+  // Client name is unique in the DB — surface a friendly 409 instead of a 500.
+  const existing = await prisma.client.findUnique({ where: { name: data.name }, select: { id: true } });
+  if (existing) {
+    return NextResponse.json({ error: "duplicate", existingId: existing.id }, { status: 409 });
+  }
 
   const client = await prisma.client.create({
     data: {
