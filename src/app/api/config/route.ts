@@ -8,11 +8,19 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [options, researchTypes, researchMethods, products] = await Promise.all([
+  const [options, researchTypes, researchMethods, products, pipelines] = await Promise.all([
     prisma.configOption.findMany({ where: { active: true }, orderBy: [{ category: "asc" }, { order: "asc" }] }),
     prisma.researchType.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.researchMethod.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.product.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.pipeline.findMany({
+      where: { active: true },
+      orderBy: [{ isDefault: "desc" }, { order: "asc" }],
+      select: {
+        id: true, name: true, isDefault: true,
+        stages: { where: { active: true }, orderBy: { order: "asc" }, select: { id: true, label: true, color: true, probability: true, isWon: true, isLost: true } },
+      },
+    }),
   ]);
 
   const byCat = (cat: string) =>
@@ -26,5 +34,6 @@ export async function GET() {
     researchTypes,
     researchMethods,
     products,
+    pipelines,
   });
 }

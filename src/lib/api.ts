@@ -65,6 +65,8 @@ export interface LeadCreateInput {
 
 // ── App config (taxonomies + lookups) ───────────────────────────────────────
 export interface ConfigItem { key: string; label: string; color: string | null }
+export interface PipelineStageCfg { id: number; label: string; color: string | null; probability: number; isWon: boolean; isLost: boolean }
+export interface PipelineCfg { id: number; name: string; isDefault: boolean; stages: PipelineStageCfg[] }
 export interface AppConfig {
   leadStatuses: ConfigItem[];
   leadSources: ConfigItem[];
@@ -73,6 +75,7 @@ export interface AppConfig {
   researchTypes: Named[];
   researchMethods: Named[];
   products: Named[];
+  pipelines: PipelineCfg[];
 }
 export async function fetchConfig(): Promise<AppConfig> {
   const res = await fetch("/api/config", { cache: "no-store" });
@@ -267,6 +270,39 @@ export interface ProjectPatch {
   model?: string | null; methodology?: string | null; state?: string | null; statusText?: string | null; billing?: number | null;
 }
 export const updateProject = (id: number, patch: ProjectPatch) => patchOk(`/api/projects/${id}`, patch);
+
+// ── Deals (pipeline) ────────────────────────────────────────────────────────
+export interface CrmDeal {
+  id: number; title: string; company: string; value: number; probability: number; health: number;
+  stageId: number; pipelineId: number; closeDate: string | null; assignee: Named | null; client: Named | null;
+}
+interface ApiDeal {
+  id: number; title: string; company: string; value: string | number; probability: number; health: number;
+  stageId: number; pipelineId: number; closeDate: string | null; assignee: Named | null; client: Named | null;
+}
+const toUIDeal = (d: ApiDeal): CrmDeal => ({
+  id: d.id, title: d.title, company: d.company, value: Number(d.value) || 0, probability: d.probability,
+  health: d.health, stageId: d.stageId, pipelineId: d.pipelineId, closeDate: d.closeDate,
+  assignee: d.assignee ?? null, client: d.client ?? null,
+});
+
+export async function fetchDeals(params: { pipelineId?: number } = {}): Promise<CrmDeal[]> {
+  const qs = new URLSearchParams();
+  if (params.pipelineId) qs.set("pipelineId", String(params.pipelineId));
+  qs.set("limit", "100");
+  const res = await fetch(`/api/deals?${qs}`, { cache: "no-store" });
+  const body = (await jsonOrThrow(res)) as Page<ApiDeal>;
+  return (body.data ?? []).map(toUIDeal);
+}
+
+export interface DealInput { title: string; company: string; value: number; probability?: number; pipelineId: number; stageId: number; clientId?: number }
+export async function createDeal(input: DealInput): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/deals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת העסקה נכשלה" };
+}
+export const updateDealStage = (id: number, stageId: number) => patchOk(`/api/deals/${id}`, { stageId });
 
 // ── Contacts ────────────────────────────────────────────────────────────────
 export interface CrmContactRow {
