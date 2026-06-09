@@ -97,6 +97,26 @@ export async function fetchStats(): Promise<DashboardStats> {
   return (await jsonOrThrow(res)) as DashboardStats;
 }
 
+// ── Sales analytics (deal-centric) ──────────────────────────────────────────
+export interface SalesAnalytics {
+  kpis: {
+    totalCount: number; openCount: number; wonCount: number; lostCount: number;
+    openValue: number; wonValue: number; totalValue: number; avgDealValue: number; winRate: number;
+  };
+  byStage: { stageId: number; label: string; color: string | null; count: number; value: number }[];
+  teamPerformance: { assigneeId: number; name: string; totalValue: number; wonValue: number; count: number }[];
+  activeDeals: {
+    id: number; title: string; company: string; value: number; probability: number; health: number;
+    closeDate: string | null; stageLabel: string | null; stageColor: string | null; assignee: string | null;
+  }[];
+}
+export async function fetchAnalytics(params: { pipelineId?: number } = {}): Promise<SalesAnalytics> {
+  const qs = new URLSearchParams();
+  if (params.pipelineId) qs.set("pipelineId", String(params.pipelineId));
+  const res = await fetch(`/api/analytics?${qs}`, { cache: "no-store" });
+  return (await jsonOrThrow(res)) as SalesAnalytics;
+}
+
 export type LeadCreateResult =
   | { status: "created"; lead: Lead }
   | { status: "duplicate"; existing: Lead }
