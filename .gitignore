@@ -16,6 +16,10 @@ build/
 # Prisma generated client (regenerated from schema)
 node_modules/.prisma/
 
+# local data imports (M-Files exports — contain real business/PII data, do not commit)
+DB import/
+*.xlsx
+
 # misc
 .DS_Store
 *.pem
