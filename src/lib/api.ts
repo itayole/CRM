@@ -99,3 +99,58 @@ export async function deleteLead(id: number): Promise<boolean> {
   const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
   return res.ok;
 }
+
+// ── Users (admin) ───────────────────────────────────────────────────────────
+export interface CrmUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  joined: string | null;
+  lastLogin: string | null;
+}
+
+export interface UserInput {
+  name: string;
+  email: string;
+  role: "admin" | "sales_rep";
+  active: boolean;
+  password?: string;
+}
+
+export async function fetchUsers(): Promise<CrmUser[]> {
+  const res = await fetch("/api/users", { cache: "no-store" });
+  const body = (await jsonOrThrow(res)) as { data: CrmUser[] };
+  return body.data ?? [];
+}
+
+export async function createUser(input: UserInput): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (res.ok) return { ok: true };
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 409) return { ok: false, message: "כתובת המייל כבר קיימת במערכת" };
+  return { ok: false, message: typeof body?.error === "string" ? body.error : "שמירת המשתמש נכשלה" };
+}
+
+export async function updateUser(id: number, patch: Partial<UserInput> & { password?: string | null }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/users/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (res.ok) return { ok: true };
+  const body = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof body?.error === "string" ? body.error : "עדכון המשתמש נכשל" };
+}
+
+export async function deleteUser(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
+  if (res.ok) return { ok: true };
+  const body = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof body?.error === "string" ? body.error : "מחיקת המשתמש נכשלה" };
+}
