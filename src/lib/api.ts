@@ -324,6 +324,18 @@ const toUIClient = (c: ApiClient): CrmClientRow => ({
   projectCount: c._count?.projects ?? 0, contactCount: c._count?.contactPeople ?? 0, dealCount: c._count?.deals ?? 0,
 });
 
+export interface ClientCreateInput {
+  name: string; industry?: string; email?: string; phone?: string; address?: string;
+  website?: string; size?: string; status?: "active" | "prospect"; notes?: string; assigneeId?: number;
+}
+export async function createClient(input: ClientCreateInput): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/clients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true };
+  if (res.status === 409) return { ok: false, message: "לקוח עם שם זה כבר קיים במערכת" };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת הלקוח נכשלה" };
+}
+
 export async function fetchClients(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmClientRow>> {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
@@ -351,6 +363,17 @@ const toUIProject = (p: ApiProject): CrmProjectRow => ({
   model: p.model, billing: p.billing == null ? null : Number(p.billing),
   sourceCreatedAt: p.sourceCreatedAt, lastUpdated: p.lastUpdated,
 });
+
+export interface ProjectCreateInput {
+  name: string; clientId?: number; assigneeId?: number;
+  model?: string; methodology?: string; statusText?: string; billing?: number;
+}
+export async function createProject(input: ProjectCreateInput): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת הפרויקט נכשלה" };
+}
 
 export async function fetchProjects(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmProjectRow>> {
   const qs = new URLSearchParams();

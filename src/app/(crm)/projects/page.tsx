@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Stat, Input, Btn, Select, Modal, FormRow, Field } from "@/components/ui";
-import { fetchProjects, updateProject, fetchActiveUsers, type CrmProjectRow } from "@/lib/api";
+import { fetchProjects, updateProject, createProject, fetchClients, fetchActiveUsers, type CrmProjectRow } from "@/lib/api";
 import { fmt } from "@/lib/utils";
 import { NAVY, GOLD, WHITE, MUTED, TEXT, BORDER, OK, SURF, ERR } from "@/lib/tokens";
 
 type Named = { id: number; name: string };
 const d10 = (s: string | null) => (s ? String(s).slice(0, 10) : "—");
-const emptyEdit = { name: "", statusText: "", methodology: "", model: "", billing: "", assigneeId: "" };
+const emptyEdit = { name: "", statusText: "", methodology: "", model: "", billing: "", assigneeId: "", clientId: "", clientName: "" };
 
 export default function ProjectsPage() {
   const [rows, setRows] = useState<CrmProjectRow[]>([]);
@@ -20,9 +20,12 @@ export default function ProjectsPage() {
   const [sel, setSel] = useState<CrmProjectRow | null>(null);
   const [users, setUsers] = useState<Named[]>([]);
   const [editId, setEditId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
   const [editForm, setEditForm] = useState(emptyEdit);
   const [editErr, setEditErr] = useState("");
   const [saving, setSaving] = useState(false);
+  const [clientQuery, setClientQuery] = useState("");
+  const [clientResults, setClientResults] = useState<Named[]>([]);
 
   const load = useCallback(async (p: number, query: string, append: boolean) => {
     setLoading(true); setErr("");
@@ -46,39 +49,94 @@ export default function ProjectsPage() {
   const canLoadMore = rows.length < total;
   const billingShown = rows.reduce((s, p) => s + (p.billing ?? 0), 0);
 
+  // Debounced client search for linking a new project to an existing client.
+  useEffect(() => {
+    if (!clientQuery) { setClientResults([]); return; }
+    const t = setTimeout(async () => {
+      try { const r = await fetchClients({ q: clientQuery, limit: 8 }); setClientResults(r.data.map(c => ({ id: c.id, name: c.name }))); } catch { /* ignore */ }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [clientQuery]);
+
+  const openCreate = () => {
+    setCreating(true);
+    setEditId(null);
+    setEditForm(emptyEdit);
+    setClientQuery(""); setClientResults([]);
+    setEditErr("");
+  };
+
   const openEdit = (p: CrmProjectRow) => {
+    setCreating(false);
     setEditId(p.id);
     setEditForm({
+      ...emptyEdit,
       name: p.name, statusText: p.statusText ?? "", methodology: p.methodology ?? "",
       model: p.model ?? "", billing: p.billing != null ? String(p.billing) : "", assigneeId: p.assignee ? String(p.assignee.id) : "",
     });
     setEditErr("");
   };
 
-  const saveEdit = async () => {
+  const closeModal = () => { setEditId(null); setCreating(false); };
+
+  const save = async () => {
     if (!editForm.name) { setEditErr("שם פרויקט הוא שדה חובה"); return; }
     setSaving(true); setEditErr("");
-    const res = await updateProject(editId!, {
-      name: editForm.name,
-      statusText: editForm.statusText || null,
-      methodology: editForm.methodology || null,
-      model: editForm.model || null,
-      billing: editForm.billing ? Number(editForm.billing) : null,
-      assigneeId: editForm.assigneeId ? Number(editForm.assigneeId) : null,
-    });
+    const res = creating
+      ? await createProject({
+          name: editForm.name,
+          clientId: editForm.clientId ? Number(editForm.clientId) : undefined,
+          assigneeId: editForm.assigneeId ? Number(editForm.assigneeId) : undefined,
+          model: editForm.model || undefined,
+          methodology: editForm.methodology || undefined,
+          statusText: editForm.statusText || undefined,
+          billing: editForm.billing ? Number(editForm.billing) : undefined,
+        })
+      : await updateProject(editId!, {
+          name: editForm.name,
+          statusText: editForm.statusText || null,
+          methodology: editForm.methodology || null,
+          model: editForm.model || null,
+          billing: editForm.billing ? Number(editForm.billing) : null,
+          assigneeId: editForm.assigneeId ? Number(editForm.assigneeId) : null,
+        });
     setSaving(false);
-    if (!res.ok) { setEditErr(res.message ?? "העדכון נכשל"); return; }
-    setEditId(null); setSel(null);
+    if (!res.ok) { setEditErr(res.message ?? "השמירה נכשלה"); return; }
+    closeModal(); setSel(null);
     load(1, q, false);
   };
 
   return (
     <div style={{ padding: "16px 20px", display: "flex", gap: 14, height: "100%", overflow: "hidden" }}>
-      {editId !== null && (
-        <Modal title="✎ עריכת פרויקט" onClose={() => setEditId(null)} width={560}>
+      {(editId !== null || creating) && (
+        <Modal title={creating ? "➕ פרויקט חדש" : "✎ עריכת פרויקט"} onClose={closeModal} width={560}>
           <div style={{ marginBottom: 10 }}>
             <Field label="שם פרויקט *"><Input value={editForm.name} onChange={v => setEditForm(p => ({ ...p, name: v }))} style={{ width: "100%" }} /></Field>
           </div>
+          {creating && (
+            <div style={{ marginBottom: 10 }}>
+              <Field label="לקוח (אופציונלי)">
+                {editForm.clientId ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                    <span style={{ background: "#E6F1FB", color: NAVY, padding: "4px 10px", borderRadius: 7, fontWeight: 700 }}>🏢 {editForm.clientName}</span>
+                    <button onClick={() => setEditForm(p => ({ ...p, clientId: "", clientName: "" }))} style={{ fontSize: 11, background: "none", border: "none", color: ERR, cursor: "pointer", fontFamily: "inherit" }}>נתק</button>
+                  </div>
+                ) : (
+                  <div style={{ position: "relative" }}>
+                    <Input value={clientQuery} onChange={setClientQuery} placeholder="הקלד שם לקוח לחיפוש וקישור..." style={{ width: "100%" }} />
+                    {clientResults.length > 0 && (
+                      <div style={{ position: "absolute", zIndex: 10, top: "100%", right: 0, left: 0, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 7, marginTop: 2, maxHeight: 160, overflowY: "auto", boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>
+                        {clientResults.map(c => (
+                          <div key={c.id} onClick={() => { setEditForm(p => ({ ...p, clientId: String(c.id), clientName: c.name })); setClientQuery(""); setClientResults([]); }}
+                            style={{ padding: "7px 11px", fontSize: 12, cursor: "pointer", borderBottom: `1px solid ${SURF}` }}>{c.name}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Field>
+            </div>
+          )}
           <FormRow>
             <Field label="סטטוס"><Input value={editForm.statusText} onChange={v => setEditForm(p => ({ ...p, statusText: v }))} placeholder="בעבודה / ממתין לאישור..." style={{ width: "100%" }} /></Field>
             <Field label="מתודולוגיה"><Input value={editForm.methodology} onChange={v => setEditForm(p => ({ ...p, methodology: v }))} placeholder="כמותי / איכותני" style={{ width: "100%" }} /></Field>
@@ -94,8 +152,8 @@ export default function ProjectsPage() {
           </div>
           {editErr && <div style={{ fontSize: 12, color: ERR, marginBottom: 10 }}>{editErr}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={saveEdit} disabled={saving}>{saving ? "שומר…" : "✓ שמור"}</Btn>
-            <Btn onClick={() => setEditId(null)} variant="secondary">ביטול</Btn>
+            <Btn onClick={save} disabled={saving}>{saving ? "שומר…" : creating ? "➕ צור פרויקט" : "✓ שמור"}</Btn>
+            <Btn onClick={closeModal} variant="secondary">ביטול</Btn>
           </div>
         </Modal>
       )}
@@ -106,6 +164,7 @@ export default function ProjectsPage() {
             <div style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>📁 פרויקטים</div>
             <div style={{ fontSize: 11, color: MUTED, marginTop: 1 }}>{total.toLocaleString()} פרויקטים · מוצגים {rows.length}</div>
           </div>
+          <Btn onClick={openCreate}>+ פרויקט חדש</Btn>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>

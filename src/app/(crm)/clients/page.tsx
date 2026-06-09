@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Av, Stat, Input, Btn, Select, Modal, FormRow, Field } from "@/components/ui";
-import { fetchClients, updateClient, fetchActiveUsers, type CrmClientRow } from "@/lib/api";
+import { fetchClients, updateClient, createClient, fetchActiveUsers, type CrmClientRow } from "@/lib/api";
 import { NAVY, GOLD, GOLD_L, WHITE, MUTED, TEXT, BORDER, OK, ERR, SURF } from "@/lib/tokens";
 
 type Named = { id: number; name: string };
@@ -18,6 +18,7 @@ export default function ClientsPage() {
   const [selected, setSelected] = useState<CrmClientRow | null>(null);
   const [users, setUsers] = useState<Named[]>([]);
   const [editId, setEditId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
   const [editForm, setEditForm] = useState(emptyEdit);
   const [editErr, setEditErr] = useState("");
   const [saving, setSaving] = useState(false);
@@ -43,7 +44,15 @@ export default function ClientsPage() {
 
   const canLoadMore = rows.length < total;
 
+  const openCreate = () => {
+    setCreating(true);
+    setEditId(null);
+    setEditForm(emptyEdit);
+    setEditErr("");
+  };
+
   const openEdit = (c: CrmClientRow) => {
+    setCreating(false);
     setEditId(c.id);
     setEditForm({
       name: c.name, industry: c.industry ?? "", email: c.email ?? "", phone: c.phone ?? "",
@@ -52,30 +61,45 @@ export default function ClientsPage() {
     setEditErr("");
   };
 
-  const saveEdit = async () => {
+  const closeModal = () => { setEditId(null); setCreating(false); };
+
+  const save = async () => {
     if (!editForm.name) { setEditErr("שם הוא שדה חובה"); return; }
     setSaving(true); setEditErr("");
-    const res = await updateClient(editId!, {
-      name: editForm.name,
-      industry: editForm.industry || null,
-      email: editForm.email || null,
-      phone: editForm.phone || null,
-      address: editForm.address || null,
-      website: editForm.website || null,
-      ...(editForm.status === "active" || editForm.status === "prospect" ? { status: editForm.status } : {}),
-      ...(editForm.assigneeId ? { assigneeId: Number(editForm.assigneeId) } : {}),
-      notes: editForm.notes || null,
-    });
+    const status = editForm.status === "active" || editForm.status === "prospect" ? editForm.status : undefined;
+    const assigneeId = editForm.assigneeId ? Number(editForm.assigneeId) : undefined;
+    const res = creating
+      ? await createClient({
+          name: editForm.name,
+          industry: editForm.industry || undefined,
+          email: editForm.email || undefined,
+          phone: editForm.phone || undefined,
+          address: editForm.address || undefined,
+          website: editForm.website || undefined,
+          status, assigneeId,
+          notes: editForm.notes || undefined,
+        })
+      : await updateClient(editId!, {
+          name: editForm.name,
+          industry: editForm.industry || null,
+          email: editForm.email || null,
+          phone: editForm.phone || null,
+          address: editForm.address || null,
+          website: editForm.website || null,
+          ...(status ? { status } : {}),
+          ...(assigneeId ? { assigneeId } : {}),
+          notes: editForm.notes || null,
+        });
     setSaving(false);
-    if (!res.ok) { setEditErr(res.message ?? "העדכון נכשל"); return; }
-    setEditId(null);
+    if (!res.ok) { setEditErr(res.message ?? "השמירה נכשלה"); return; }
+    closeModal();
     load(1, q, false);
   };
 
   return (
     <div style={{ padding: "16px 20px", display: "flex", gap: 14, height: "100%", overflow: "hidden" }}>
-      {editId !== null && (
-        <Modal title="✎ עריכת לקוח" onClose={() => setEditId(null)} width={560}>
+      {(editId !== null || creating) && (
+        <Modal title={creating ? "➕ לקוח חדש" : "✎ עריכת לקוח"} onClose={closeModal} width={560}>
           <FormRow>
             <Field label="שם חברה *"><Input value={editForm.name} onChange={v => setEditForm(p => ({ ...p, name: v }))} style={{ width: "100%" }} /></Field>
             <Field label="תעשייה"><Input value={editForm.industry} onChange={v => setEditForm(p => ({ ...p, industry: v }))} style={{ width: "100%" }} /></Field>
@@ -103,8 +127,8 @@ export default function ClientsPage() {
           </div>
           {editErr && <div style={{ fontSize: 12, color: ERR, marginBottom: 10 }}>{editErr}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={saveEdit} disabled={saving}>{saving ? "שומר…" : "✓ שמור"}</Btn>
-            <Btn onClick={() => setEditId(null)} variant="secondary">ביטול</Btn>
+            <Btn onClick={save} disabled={saving}>{saving ? "שומר…" : creating ? "➕ צור לקוח" : "✓ שמור"}</Btn>
+            <Btn onClick={closeModal} variant="secondary">ביטול</Btn>
           </div>
         </Modal>
       )}
@@ -115,6 +139,7 @@ export default function ClientsPage() {
             <div style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>🏢 לקוחות</div>
             <div style={{ fontSize: 11, color: MUTED, marginTop: 1 }}>{total.toLocaleString()} לקוחות · מוצגים {rows.length}</div>
           </div>
+          <Btn onClick={openCreate}>+ לקוח חדש</Btn>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
