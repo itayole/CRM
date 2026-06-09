@@ -3,13 +3,13 @@
 # (salesflow-crm, :3000). Points at the SalesFlowCRM_test database copy, so
 # destructive testing never touches production data.
 #
-# build context is the repo root (../..) — run from a full checkout on the QNAP.
+# Pulls the pre-built app image (same image as prod — only the env differs).
+# Build & push the image from a build machine, then `pull` on the QNAP.
 # See README.md in this directory for the full runbook.
 services:
   crm-test:
-    build:
-      context: ../..
-      dockerfile: Dockerfile
+    # ⚠ confirm/adjust to your actual image name + tag if different:
+    image: ghcr.io/itayole/salesflow-crm:latest
     container_name: CRM_test
     restart: unless-stopped
     ports:
