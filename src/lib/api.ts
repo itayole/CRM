@@ -270,6 +270,20 @@ export async function fetchAnalytics(params: { pipelineId?: number } = {}): Prom
   return (await jsonOrThrow(res)) as SalesAnalytics;
 }
 
+// Project / billing analytics (research-firm view).
+export interface ProjectAnalytics {
+  kpis: { totalProjects: number; totalBilling: number; withBilling: number; avgBilling: number };
+  byMethodology: { name: string; count: number; billing: number }[];
+  byManager: { name: string; count: number; billing: number }[];
+  byClient: { name: string; count: number; billing: number }[];
+  byStatus: { name: string; count: number }[];
+  byResearchType: { name: string; count: number; billing: number }[];
+}
+export async function fetchProjectAnalytics(): Promise<ProjectAnalytics> {
+  const res = await fetch("/api/analytics/projects", { cache: "no-store" });
+  return (await jsonOrThrow(res)) as ProjectAnalytics;
+}
+
 export type LeadCreateResult =
   | { status: "created"; lead: Lead }
   | { status: "duplicate"; existing: Lead }
