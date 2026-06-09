@@ -1,0 +1,26 @@
+# Test deployment — runs ALONGSIDE prod on port 3001, pointed at the
+# SalesFlowCRM_test database copy. Safe for destructive CRUD testing.
+#
+# One-time setup:
+#   1) Restore SalesFlowCRM -> SalesFlowCRM_test on the SQL box (see runbook).
+#   2) cp .env.test.example .env.test  and fill in the secrets (.env.test is gitignored).
+#   3) docker-compose -f docker-compose.test.yml up -d --build
+#
+# Prod (docker-compose.yml, port 3000) is unaffected and can run at the same time.
+services:
+  app-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: salesflow-crm-test
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    env_file:
+      - .env.test
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
