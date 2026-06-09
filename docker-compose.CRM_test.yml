@@ -1,0 +1,30 @@
+# ── CRM_test — test deployment for the QNAP (192.168.1.197) ──────────────────
+# A separate container "CRM_test" on port 3001, running ALONGSIDE prod
+# (salesflow-crm, :3000). Points at the SalesFlowCRM_test database copy, so
+# destructive testing never touches production data.
+#
+# Deploy on the QNAP (in the repo directory, same place prod is built):
+#   1) git fetch && git checkout feat/pre-test-improvements   (or the merged branch)
+#   2) cp .env.test.example .env.test   then fill in the secrets   (.env.test is gitignored)
+#   3) docker compose -f docker-compose.CRM_test.yml up -d --build
+#
+# Manage:
+#   docker compose -f docker-compose.CRM_test.yml logs -f
+#   docker compose -f docker-compose.CRM_test.yml down
+services:
+  crm-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: CRM_test
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    env_file:
+      - .env.test
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
