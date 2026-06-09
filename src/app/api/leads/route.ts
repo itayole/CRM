@@ -16,6 +16,7 @@ const CreateLeadSchema = z.object({
   notes: z.string().optional(),
   assigneeId: z.number().int().positive().optional(),
   clientId: z.number().int().positive().optional(),
+  contactId: z.number().int().positive().optional(),
   researchTypeId: z.number().int().positive().optional(),
   researchMethodId: z.number().int().positive().optional(),
   productId: z.number().int().positive().optional(),
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest) {
   const [leads, total] = await Promise.all([
     prisma.lead.findMany({
       where,
-      include: { assignee: { select: { id: true, name: true } } },
+      include: { assignee: { select: { id: true, name: true } }, contact: { select: { id: true, fullName: true } } },
       orderBy: { created: "desc" },
       skip: (page - 1) * limit,
       take: limit,
@@ -128,10 +129,12 @@ export async function POST(req: NextRequest) {
       notes: data.notes,
       assigneeId,
       clientId: data.clientId,
+      contactId: data.contactId,
       researchTypeId: data.researchTypeId,
       researchMethodId: data.researchMethodId,
       productId: data.productId,
     },
+    include: { assignee: { select: { id: true, name: true } }, contact: { select: { id: true, fullName: true } } },
   });
 
   return NextResponse.json({ status: "created", lead }, { status: 201 });

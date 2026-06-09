@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Av, Bdg, Btn, Input, Select, Modal, FormRow, Field } from "@/components/ui";
-import { fetchLeads, createLead, updateLead, deleteLead, createClient, fetchConfig, fetchActiveUsers, fetchClients, type AppConfig } from "@/lib/api";
+import { fetchLeads, createLead, updateLead, deleteLead, createClient, fetchContacts, createContact, fetchConfig, fetchActiveUsers, fetchClients, type AppConfig } from "@/lib/api";
 import { fmt } from "@/lib/utils";
 import { LEAD_STATUS } from "@/lib/mockData";
 import { NAVY, GOLD_L, BLUE, SURF, WHITE, MUTED, TEXT, BORDER, OK, WARN, ERR } from "@/lib/tokens";
@@ -25,12 +25,14 @@ export default function LeadsPage() {
   const [selCompany, setSelCompany] = useState<string | null>(null);
   const [dupWarning, setDupWarning] = useState<{ msg: string; match: Lead } | null>(null);
 
-  const emptyForm = { name: "", company: "", email: "", phone: "", status: "", value: "", source: "", notes: "", assigneeId: "", clientId: "", researchTypeId: "", researchMethodId: "", productId: "" };
+  const emptyForm = { name: "", company: "", email: "", phone: "", status: "", value: "", source: "", notes: "", assigneeId: "", clientId: "", contactId: "", researchTypeId: "", researchMethodId: "", productId: "" };
   const [form, setForm] = useState<typeof emptyForm>(emptyForm);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
   const [clientQuery, setClientQuery] = useState("");
   const [clientResults, setClientResults] = useState<{ id: number; name: string }[]>([]);
+  const [contactResults, setContactResults] = useState<{ id: number; name: string; email: string | null; mobile: string | null }[]>([]);
+  const [nameFocus, setNameFocus] = useState(false);
 
   // ── Live data ─────────────────────────────────────────────────────────────
   const reload = useCallback(async () => {
@@ -61,6 +63,43 @@ export default function LeadsPage() {
     }, 300);
     return () => clearTimeout(t);
   }, [clientQuery]);
+
+  // Debounced contact-person search (the "full name" field). When a client is
+  // linked and the field is empty, it lists that client's contacts; once you
+  // type, it searches all contacts so cross-company people stay findable.
+  useEffect(() => {
+    if (!nameFocus || !!form.contactId) { return; }
+    const q = form.name.trim();
+    if (!q && !form.clientId) { setContactResults([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetchContacts({ q: q || undefined, clientId: q ? undefined : (form.clientId ? Number(form.clientId) : undefined), limit: 8 });
+        setContactResults(r.data.map(c => ({ id: c.id, name: c.fullName || "(ללא שם)", email: c.email, mobile: c.mobile })));
+      } catch { /* ignore */ }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [form.name, form.clientId, form.contactId, nameFocus]);
+
+  // Link an existing contact: set the FK and autofill empty contact details.
+  // Does NOT change the company link (a contact may work with several companies).
+  const linkContact = (c: { id: number; name: string; email: string | null; mobile: string | null }) => {
+    setForm(p => ({ ...p, contactId: String(c.id), name: c.name, email: p.email || c.email || "", phone: p.phone || c.mobile || "" }));
+    setContactResults([]); setNameFocus(false);
+  };
+
+  const createContactInline = async () => {
+    const name = form.name.trim();
+    if (!name) return;
+    const res = await createContact({ fullName: name, clientId: form.clientId ? Number(form.clientId) : null, email: form.email || null, mobile: form.phone || null });
+    if (!res.ok) { alert(res.message ?? "יצירת איש הקשר נכשלה"); return; }
+    // createContact does not return the id; refetch by name to link it.
+    try {
+      const r = await fetchContacts({ q: name, limit: 1 });
+      const made = r.data[0];
+      if (made) setForm(p => ({ ...p, contactId: String(made.id), name }));
+    } catch { /* ignore */ }
+    setContactResults([]); setNameFocus(false);
+  };
 
   // Client-side pre-check for instant feedback; the server is authoritative (409).
   const checkDuplicate = (f: typeof emptyForm, existing: Lead[]) => {
@@ -108,8 +147,9 @@ export default function LeadsPage() {
       ...emptyForm,
       name: l.name, company: l.company, email: l.email || "", phone: l.phone || "",
       status: l.status || "", value: l.value ? String(l.value) : "", source: l.source || "", notes: l.notes || "",
+      clientId: l.clientId ? String(l.clientId) : "", contactId: l.contactId ? String(l.contactId) : "",
     });
-    setDupWarning(null); setClientQuery(""); setClientResults([]); setModal(true);
+    setDupWarning(null); setClientQuery(""); setClientResults([]); setContactResults([]); setModal(true);
   };
 
   const closeModal = () => { setModal(false); setEditId(null); setForm(emptyForm); setDupWarning(null); };
@@ -129,6 +169,7 @@ export default function LeadsPage() {
         notes: form.notes || null,
         assigneeId: form.assigneeId ? Number(form.assigneeId) : undefined,
         clientId: form.clientId ? Number(form.clientId) : null,
+        contactId: form.contactId ? Number(form.contactId) : null,
       });
       setSaving(false);
       if (!res.ok) { alert(res.message ?? "עדכון הליד נכשל"); return; }
@@ -147,6 +188,7 @@ export default function LeadsPage() {
       notes: form.notes || undefined,
       assigneeId: form.assigneeId ? Number(form.assigneeId) : undefined,
       clientId: form.clientId ? Number(form.clientId) : undefined,
+      contactId: form.contactId ? Number(form.contactId) : undefined,
       researchTypeId: form.researchTypeId ? Number(form.researchTypeId) : undefined,
       researchMethodId: form.researchMethodId ? Number(form.researchMethodId) : undefined,
       productId: form.productId ? Number(form.productId) : undefined,
@@ -214,7 +256,34 @@ export default function LeadsPage() {
             </div>
           )}
           <FormRow>
-            <Field label="שם מלא *"><Input value={form.name} onChange={v => handleFormChange("name", v)} placeholder="ישראל ישראלי" style={{ width: "100%" }} /></Field>
+            <Field label="שם מלא *">
+              {form.contactId ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                  <span style={{ background: "#EAF3FE", color: NAVY, padding: "4px 10px", borderRadius: 7, fontWeight: 700 }}>👤 {form.name} ✓</span>
+                  <button onClick={() => setForm(p => ({ ...p, contactId: "" }))} style={{ fontSize: 11, background: "none", border: "none", color: ERR, cursor: "pointer", fontFamily: "inherit" }}>נתק</button>
+                </div>
+              ) : (
+                <div style={{ position: "relative" }} onFocus={() => setNameFocus(true)} onBlur={() => setTimeout(() => setNameFocus(false), 150)}>
+                  <Input value={form.name} onChange={v => handleFormChange("name", v)} placeholder="שם איש הקשר — הקלד לחיפוש" style={{ width: "100%" }} />
+                  {nameFocus && (contactResults.length > 0 || form.name.trim()) && (
+                    <div style={{ position: "absolute", zIndex: 10, top: "100%", right: 0, left: 0, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 7, marginTop: 2, maxHeight: 200, overflowY: "auto", boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>
+                      {contactResults.map(c => (
+                        <div key={c.id} onMouseDown={() => linkContact(c)}
+                          style={{ padding: "7px 11px", fontSize: 12, cursor: "pointer", borderBottom: `1px solid ${SURF}`, display: "flex", alignItems: "center", gap: 6 }}>
+                          <span>👤</span><span style={{ fontWeight: 600 }}>{c.name}</span>{c.email && <span style={{ fontSize: 10, color: MUTED }}>{c.email}</span>}<span style={{ marginInlineStart: "auto", fontSize: 10, color: MUTED }}>איש קשר קיים</span>
+                        </div>
+                      ))}
+                      {form.name.trim() && !contactResults.some(c => c.name === form.name.trim()) && (
+                        <div onMouseDown={createContactInline}
+                          style={{ padding: "8px 11px", fontSize: 12, cursor: "pointer", color: NAVY, fontWeight: 700, background: SURF }}>
+                          ➕ צור «{form.name.trim()}» כאיש קשר חדש
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Field>
             <Field label="חברה *">
               {form.clientId ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>

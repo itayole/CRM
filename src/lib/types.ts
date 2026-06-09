@@ -21,6 +21,9 @@ export interface Lead {
   assignee: string;
   notes?: string;
   activity?: ActivityEntry[];
+  clientId?: number | null;
+  contactId?: number | null;
+  contactName?: string;
 }
 
 export interface ActivityEntry {

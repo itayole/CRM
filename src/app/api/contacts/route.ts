@@ -30,11 +30,16 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const search = searchParams.get("q");
   const status = searchParams.get("status");
+  const clientId = searchParams.get("clientId");
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
   const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") ?? 50)));
 
+  // clientId scopes to a client's contacts (used by the project/lead pickers),
+  // but a free-text query searches across all contacts so cross-company people
+  // (e.g. an advisor) stay findable.
   const where = {
     ...(status ? { status } : {}),
+    ...(clientId && !search ? { clientId: Number(clientId) } : {}),
     ...(search
       ? { OR: [{ fullName: { contains: search } }, { email: { contains: search } }, { companyName: { contains: search } }] }
       : {}),

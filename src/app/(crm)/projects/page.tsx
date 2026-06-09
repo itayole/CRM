@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Stat, Input, Btn, Select, Modal, FormRow, Field } from "@/components/ui";
-import { fetchProjects, updateProject, createProject, deleteProject, fetchClients, fetchActiveUsers, type CrmProjectRow } from "@/lib/api";
+import { fetchProjects, updateProject, createProject, deleteProject, fetchClients, fetchContacts, fetchActiveUsers, type CrmProjectRow } from "@/lib/api";
 import { useApp } from "@/context/AppContext";
 import { fmt } from "@/lib/utils";
 import { NAVY, GOLD, WHITE, MUTED, TEXT, BORDER, OK, SURF, ERR } from "@/lib/tokens";
 
 type Named = { id: number; name: string };
 const d10 = (s: string | null) => (s ? String(s).slice(0, 10) : "—");
-const emptyEdit = { name: "", statusText: "", methodology: "", model: "", billing: "", assigneeId: "", clientId: "", clientName: "" };
+const emptyEdit = { name: "", statusText: "", methodology: "", model: "", billing: "", assigneeId: "", clientId: "", clientName: "", contactId: "", contactName: "" };
 
 export default function ProjectsPage() {
   const { isAdmin } = useApp();
@@ -28,6 +28,9 @@ export default function ProjectsPage() {
   const [saving, setSaving] = useState(false);
   const [clientQuery, setClientQuery] = useState("");
   const [clientResults, setClientResults] = useState<Named[]>([]);
+  const [contactQuery, setContactQuery] = useState("");
+  const [contactResults, setContactResults] = useState<Named[]>([]);
+  const [contactFocus, setContactFocus] = useState(false);
 
   const load = useCallback(async (p: number, query: string, append: boolean) => {
     setLoading(true); setErr("");
@@ -60,11 +63,26 @@ export default function ProjectsPage() {
     return () => clearTimeout(t);
   }, [clientQuery]);
 
+  // Debounced contact search. Scoped to the project's client when present (empty
+  // query lists that client's contacts); a typed query searches all contacts.
+  useEffect(() => {
+    if (!contactFocus || !!editForm.contactId) return;
+    const q = contactQuery.trim();
+    if (!q && !editForm.clientId) { setContactResults([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetchContacts({ q: q || undefined, clientId: q ? undefined : (editForm.clientId ? Number(editForm.clientId) : undefined), limit: 8 });
+        setContactResults(r.data.map(c => ({ id: c.id, name: c.fullName || "(ללא שם)" })));
+      } catch { /* ignore */ }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [contactQuery, editForm.clientId, editForm.contactId, contactFocus]);
+
   const openCreate = () => {
     setCreating(true);
     setEditId(null);
     setEditForm(emptyEdit);
-    setClientQuery(""); setClientResults([]);
+    setClientQuery(""); setClientResults([]); setContactQuery(""); setContactResults([]);
     setEditErr("");
   };
 
@@ -75,7 +93,10 @@ export default function ProjectsPage() {
       ...emptyEdit,
       name: p.name, statusText: p.statusText ?? "", methodology: p.methodology ?? "",
       model: p.model ?? "", billing: p.billing != null ? String(p.billing) : "", assigneeId: p.assignee ? String(p.assignee.id) : "",
+      clientId: p.client ? String(p.client.id) : "", clientName: p.client?.name ?? "",
+      contactId: p.contact ? String(p.contact.id) : "", contactName: p.contact?.fullName ?? "",
     });
+    setClientQuery(""); setClientResults([]); setContactQuery(""); setContactResults([]);
     setEditErr("");
   };
 
@@ -96,6 +117,7 @@ export default function ProjectsPage() {
       ? await createProject({
           name: editForm.name,
           clientId: editForm.clientId ? Number(editForm.clientId) : undefined,
+          contactId: editForm.contactId ? Number(editForm.contactId) : undefined,
           assigneeId: editForm.assigneeId ? Number(editForm.assigneeId) : undefined,
           model: editForm.model || undefined,
           methodology: editForm.methodology || undefined,
@@ -109,6 +131,7 @@ export default function ProjectsPage() {
           model: editForm.model || null,
           billing: editForm.billing ? Number(editForm.billing) : null,
           assigneeId: editForm.assigneeId ? Number(editForm.assigneeId) : null,
+          contactId: editForm.contactId ? Number(editForm.contactId) : null,
         });
     setSaving(false);
     if (!res.ok) { setEditErr(res.message ?? "השמירה נכשלה"); return; }
@@ -158,6 +181,30 @@ export default function ProjectsPage() {
           <div style={{ marginBottom: 10 }}>
             <Field label="מנהל לקוח / אחראי">
               <Select value={editForm.assigneeId} onChange={v => setEditForm(p => ({ ...p, assigneeId: v }))} options={[{ value: "", label: "— ללא —" }, ...users.map(u => ({ value: String(u.id), label: u.name }))]} style={{ width: "100%" }} />
+            </Field>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <Field label="איש קשר (אופציונלי)">
+              {editForm.contactId ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                  <span style={{ background: "#EAF3FE", color: NAVY, padding: "4px 10px", borderRadius: 7, fontWeight: 700 }}>👤 {editForm.contactName}</span>
+                  <button onClick={() => setEditForm(p => ({ ...p, contactId: "", contactName: "" }))} style={{ fontSize: 11, background: "none", border: "none", color: ERR, cursor: "pointer", fontFamily: "inherit" }}>נתק</button>
+                </div>
+              ) : (
+                <div style={{ position: "relative" }} onFocusCapture={() => setContactFocus(true)} onBlur={() => setTimeout(() => setContactFocus(false), 150)}>
+                  <Input value={contactQuery} onChange={setContactQuery} placeholder={editForm.clientId ? "אנשי קשר של הלקוח — או הקלד לחיפוש כללי" : "הקלד שם איש קשר לחיפוש..."} style={{ width: "100%" }} />
+                  {contactFocus && contactResults.length > 0 && (
+                    <div style={{ position: "absolute", zIndex: 10, top: "100%", right: 0, left: 0, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 7, marginTop: 2, maxHeight: 180, overflowY: "auto", boxShadow: "0 6px 18px rgba(0,0,0,.12)" }}>
+                      {contactResults.map(c => (
+                        <div key={c.id} onMouseDown={() => { setEditForm(p => ({ ...p, contactId: String(c.id), contactName: c.name })); setContactQuery(""); setContactResults([]); setContactFocus(false); }}
+                          style={{ padding: "7px 11px", fontSize: 12, cursor: "pointer", borderBottom: `1px solid ${SURF}`, display: "flex", alignItems: "center", gap: 6 }}>
+                          <span>👤</span><span style={{ fontWeight: 600 }}>{c.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </Field>
           </div>
           {editErr && <div style={{ fontSize: 12, color: ERR, marginBottom: 10 }}>{editErr}</div>}
@@ -240,6 +287,7 @@ export default function ProjectsPage() {
             ["לקוח", sel.client?.name || sel.clientName || "—"],
             ["קישור ללקוח", sel.client ? "מקושר ✓" : "לא מקושר (שם בלבד)"],
             ["מנהל לקוח", sel.assignee?.name || "—"],
+            ["איש קשר", sel.contact?.fullName || "—"],
             ["מתודולוגיה", sel.methodology || "—"],
             ["מודל", sel.model || "—"],
             ["סטטוס", sel.statusText || "—"],

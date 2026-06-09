@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 const CreateProjectSchema = z.object({
   name: z.string().min(1).max(300),
   clientId: z.number().int().positive().optional(),
+  contactId: z.number().int().positive().optional(),
   assigneeId: z.number().int().positive().optional(),
   model: z.string().max(100).optional(),
   methodology: z.string().max(100).optional(),
@@ -45,6 +46,7 @@ export async function GET(req: NextRequest) {
       include: {
         client: { select: { id: true, name: true } },
         assignee: { select: { id: true, name: true } },
+        contact: { select: { id: true, fullName: true } },
       },
       orderBy: { projectNo: "desc" },
       skip: (page - 1) * limit,
@@ -74,6 +76,10 @@ export async function POST(req: NextRequest) {
     const c = await prisma.client.findUnique({ where: { id: data.clientId }, select: { id: true } });
     if (!c) return NextResponse.json({ error: "Client not found" }, { status: 422 });
   }
+  if (data.contactId) {
+    const ct = await prisma.contact.findUnique({ where: { id: data.contactId }, select: { id: true } });
+    if (!ct) return NextResponse.json({ error: "Contact not found" }, { status: 422 });
+  }
 
   // CRM-created project (no M-Files projectNo). Stamp source/updated dates so it
   // sorts and displays alongside synced projects.
@@ -82,6 +88,7 @@ export async function POST(req: NextRequest) {
     data: {
       name: data.name,
       clientId: data.clientId,
+      contactId: data.contactId,
       assigneeId,
       model: data.model,
       methodology: data.methodology,

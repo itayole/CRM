@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 const UpdateProjectSchema = z.object({
   name: z.string().min(1).max(300).optional(),
   clientId: z.number().int().positive().nullable().optional(),
+  contactId: z.number().int().positive().nullable().optional(),
   assigneeId: z.number().int().positive().nullable().optional(),
   model: z.string().max(100).nullable().optional(),
   methodology: z.string().max(100).nullable().optional(),
@@ -18,6 +19,7 @@ const UpdateProjectSchema = z.object({
 const include = {
   client: { select: { id: true, name: true } },
   assignee: { select: { id: true, name: true } },
+  contact: { select: { id: true, fullName: true } },
 } as const;
 
 async function getProjectOrForbid(id: number, session: Session) {
@@ -60,6 +62,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (parsed.data.clientId) {
     const c = await prisma.client.findUnique({ where: { id: parsed.data.clientId } });
     if (!c) return NextResponse.json({ error: "Client not found" }, { status: 422 });
+  }
+  if (parsed.data.contactId) {
+    const ct = await prisma.contact.findUnique({ where: { id: parsed.data.contactId } });
+    if (!ct) return NextResponse.json({ error: "Contact not found" }, { status: 422 });
   }
 
   const updated = await prisma.project.update({ where: { id }, data: parsed.data, include });

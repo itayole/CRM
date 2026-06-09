@@ -18,6 +18,9 @@ interface ApiLead {
   created: string | null;
   activity: string | null;
   assignee?: { id: number; name: string } | null;
+  clientId?: number | null;
+  contactId?: number | null;
+  contact?: { id: number; fullName: string | null } | null;
 }
 
 function parseActivity(raw: string | null): ActivityEntry[] {
@@ -44,6 +47,9 @@ export function toUILead(l: ApiLead): Lead {
     assignee: l.assignee?.name ?? "",
     notes: l.notes ?? "",
     activity: parseActivity(l.activity),
+    clientId: l.clientId ?? null,
+    contactId: l.contactId ?? null,
+    contactName: l.contact?.fullName ?? "",
   };
 }
 
@@ -58,6 +64,7 @@ export interface LeadCreateInput {
   notes?: string;
   assigneeId?: number;
   clientId?: number;
+  contactId?: number;
   researchTypeId?: number;
   researchMethodId?: number;
   productId?: number;
@@ -257,7 +264,7 @@ export async function deleteLead(id: number): Promise<boolean> {
 export interface LeadUpdateInput {
   name?: string; company?: string; email?: string | null; phone?: string | null;
   status?: string; value?: number; source?: string | null; notes?: string | null;
-  assigneeId?: number; clientId?: number | null;
+  assigneeId?: number; clientId?: number | null; contactId?: number | null;
 }
 export async function updateLead(id: number, patch: LeadUpdateInput): Promise<{ ok: boolean; lead?: Lead; message?: string }> {
   const res = await fetch(`/api/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
@@ -373,23 +380,24 @@ export async function fetchClients(params: { q?: string; page?: number; limit?: 
 // ── Projects ────────────────────────────────────────────────────────────────
 export interface CrmProjectRow {
   id: number; projectNo: number | null; name: string; clientName: string | null; client: Named | null;
-  assignee: Named | null; state: string | null; statusText: string | null; methodology: string | null;
+  assignee: Named | null; contact: ContactRef | null; state: string | null; statusText: string | null; methodology: string | null;
   model: string | null; billing: number | null; sourceCreatedAt: string | null; lastUpdated: string | null;
 }
+interface ContactRef { id: number; fullName: string | null }
 interface ApiProject {
   id: number; projectNo: number | null; name: string; clientName: string | null; client: Named | null;
-  assignee: Named | null; state: string | null; statusText: string | null; methodology: string | null;
+  assignee: Named | null; contact: ContactRef | null; state: string | null; statusText: string | null; methodology: string | null;
   model: string | null; billing: string | number | null; sourceCreatedAt: string | null; lastUpdated: string | null;
 }
 const toUIProject = (p: ApiProject): CrmProjectRow => ({
   id: p.id, projectNo: p.projectNo, name: p.name, clientName: p.clientName, client: p.client ?? null,
-  assignee: p.assignee ?? null, state: p.state, statusText: p.statusText, methodology: p.methodology,
+  assignee: p.assignee ?? null, contact: p.contact ?? null, state: p.state, statusText: p.statusText, methodology: p.methodology,
   model: p.model, billing: p.billing == null ? null : Number(p.billing),
   sourceCreatedAt: p.sourceCreatedAt, lastUpdated: p.lastUpdated,
 });
 
 export interface ProjectCreateInput {
-  name: string; clientId?: number; assigneeId?: number;
+  name: string; clientId?: number; contactId?: number; assigneeId?: number;
   model?: string; methodology?: string; statusText?: string; billing?: number;
 }
 export async function createProject(input: ProjectCreateInput): Promise<{ ok: boolean; message?: string }> {
@@ -423,7 +431,7 @@ export interface ClientPatch {
 export const updateClient = (id: number, patch: ClientPatch) => patchOk(`/api/clients/${id}`, patch);
 
 export interface ProjectPatch {
-  name?: string; clientId?: number | null; assigneeId?: number | null;
+  name?: string; clientId?: number | null; contactId?: number | null; assigneeId?: number | null;
   model?: string | null; methodology?: string | null; state?: string | null; statusText?: string | null; billing?: number | null;
 }
 export const updateProject = (id: number, patch: ProjectPatch) => patchOk(`/api/projects/${id}`, patch);
@@ -484,9 +492,10 @@ export interface ContactInput {
   companyName?: string | null; category?: string | null; newsletter?: boolean; status?: string | null;
   clientId?: number | null; accountManagerId?: number | null;
 }
-export async function fetchContacts(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmContactRow>> {
+export async function fetchContacts(params: { q?: string; clientId?: number; page?: number; limit?: number } = {}): Promise<Page<CrmContactRow>> {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
+  if (params.clientId) qs.set("clientId", String(params.clientId));
   qs.set("page", String(params.page ?? 1));
   qs.set("limit", String(params.limit ?? 60));
   const res = await fetch(`/api/contacts?${qs}`, { cache: "no-store" });
