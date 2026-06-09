@@ -299,7 +299,7 @@ model LeadIntegration {
 // Standalone contacts imported from M-Files (active / raw / unsubscribed sheets).
 model Contact {
   id               Int      @id @default(autoincrement())
-  mfilesId         Int?                              // M-Files object id (sync key)
+  mfilesId         Int?     @unique                  // M-Files object id (sync key)
   fullName         String?  @db.NVarChar(200)
   firstName        String?  @db.NVarChar(100)
   email            String?  @db.NVarChar(320)
