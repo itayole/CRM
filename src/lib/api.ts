@@ -89,6 +89,56 @@ export async function fetchConfig(): Promise<AppConfig> {
   return (await jsonOrThrow(res)) as AppConfig;
 }
 
+// ── Config administration (Settings page, admin-only) ───────────────────────
+export interface ConfigOptionRow { id: number; category: string; key: string; label: string; color: string | null; order: number; active: boolean }
+const msgOr = async (res: Response, fallback: string) => { const b = await res.json().catch(() => ({})); return typeof b?.error === "string" ? b.error : fallback; };
+
+export async function fetchConfigOptions(): Promise<ConfigOptionRow[]> {
+  const res = await fetch("/api/config/options", { cache: "no-store" });
+  const body = (await jsonOrThrow(res)) as { data: ConfigOptionRow[] };
+  return body.data ?? [];
+}
+export async function createConfigOption(input: { category: string; label: string; color?: string | null }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/config/options", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true };
+  if (res.status === 409) return { ok: false, message: "מפתח כבר קיים בקטגוריה זו" };
+  return { ok: false, message: await msgOr(res, "הוספת הפריט נכשלה") };
+}
+export async function updateConfigOption(id: number, patch: { label?: string; color?: string | null; order?: number; active?: boolean }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/options/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "עדכון הפריט נכשל") };
+}
+export async function deleteConfigOption(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/options/${id}`, { method: "DELETE" });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "מחיקת הפריט נכשלה") };
+}
+
+export async function createPipeline(input: { name: string }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/config/pipelines", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "הוספת הצינור נכשלה") };
+}
+export async function updatePipeline(id: number, patch: { name?: string; isDefault?: boolean; active?: boolean; order?: number }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/pipelines/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "עדכון הצינור נכשל") };
+}
+export async function deletePipeline(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/pipelines/${id}`, { method: "DELETE" });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "מחיקת הצינור נכשלה") };
+}
+
+export async function createStage(input: { pipelineId: number; label: string; color?: string | null; probability?: number; isWon?: boolean; isLost?: boolean }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch("/api/config/stages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "הוספת השלב נכשלה") };
+}
+export async function updateStage(id: number, patch: { label?: string; color?: string | null; probability?: number; isWon?: boolean; isLost?: boolean; order?: number; active?: boolean }): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/stages/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "עדכון השלב נכשל") };
+}
+export async function deleteStage(id: number): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch(`/api/config/stages/${id}`, { method: "DELETE" });
+  return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "מחיקת השלב נכשלה") };
+}
+
 // ── Dashboard stats ─────────────────────────────────────────────────────────
 export interface DashboardStats {
   counts: { clients: number; projects: number; contacts: number; leads: number; deals: number; users: number };
