@@ -13,6 +13,7 @@ build/
 .env.local
 .env.*.local
 .env.test
+.env.prod
 
 # Prisma generated client (regenerated from schema)
 node_modules/.prisma/
