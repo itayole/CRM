@@ -15,6 +15,13 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Sub-path deployment (portal gateway): bake the base path into the build.
+#   prod:  --build-arg BASE_PATH=/crm       (tag :latest)
+#   test:  --build-arg BASE_PATH=/crm-test  (tag :test)
+# Empty (default) = serve at the domain root.
+ARG BASE_PATH=""
+ENV NEXT_PUBLIC_BASE_PATH=$BASE_PATH
+
 RUN npx prisma generate
 RUN npm run build
 
@@ -24,6 +31,9 @@ RUN apk add --no-cache openssl
 WORKDIR /app
 
 ENV NODE_ENV=production
+# Mirror the build-time base path at runtime (server-side env lookups).
+ARG BASE_PATH=""
+ENV NEXT_PUBLIC_BASE_PATH=$BASE_PATH
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs

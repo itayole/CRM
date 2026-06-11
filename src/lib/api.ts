@@ -3,6 +3,12 @@
 // activity-as-JSON-string) into the UI types used by the pages.
 import type { Lead, ActivityEntry } from "@/lib/types";
 
+// Sub-path support: client fetch() bypasses Next's basePath, so every API URL
+// gets the build-time prefix explicitly (e.g. "/crm/api/leads" under /crm).
+// NEXT_PUBLIC_BASE_PATH is inlined at build time and must equal next.config basePath.
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const apiUrl = (p: string) => `${BASE_PATH}${p}`;
+
 // ── Lead ──────────────────────────────────────────────────────────────────
 interface ApiLead {
   id: number;
@@ -85,7 +91,7 @@ export interface AppConfig {
   pipelines: PipelineCfg[];
 }
 export async function fetchConfig(): Promise<AppConfig> {
-  const res = await fetch("/api/config", { cache: "no-store" });
+  const res = await fetch(apiUrl("/api/config"), { cache: "no-store" });
   return (await jsonOrThrow(res)) as AppConfig;
 }
 
@@ -94,48 +100,48 @@ export interface ConfigOptionRow { id: number; category: string; key: string; la
 const msgOr = async (res: Response, fallback: string) => { const b = await res.json().catch(() => ({})); return typeof b?.error === "string" ? b.error : fallback; };
 
 export async function fetchConfigOptions(): Promise<ConfigOptionRow[]> {
-  const res = await fetch("/api/config/options", { cache: "no-store" });
+  const res = await fetch(apiUrl("/api/config/options"), { cache: "no-store" });
   const body = (await jsonOrThrow(res)) as { data: ConfigOptionRow[] };
   return body.data ?? [];
 }
 export async function createConfigOption(input: { category: string; label: string; color?: string | null }): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch("/api/config/options", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const res = await fetch(apiUrl("/api/config/options"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   if (res.ok) return { ok: true };
   if (res.status === 409) return { ok: false, message: "מפתח כבר קיים בקטגוריה זו" };
   return { ok: false, message: await msgOr(res, "הוספת הפריט נכשלה") };
 }
 export async function updateConfigOption(id: number, patch: { label?: string; color?: string | null; order?: number; active?: boolean }): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/config/options/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  const res = await fetch(apiUrl(`/api/config/options/${id}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
   return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "עדכון הפריט נכשל") };
 }
 export async function deleteConfigOption(id: number): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/config/options/${id}`, { method: "DELETE" });
+  const res = await fetch(apiUrl(`/api/config/options/${id}`), { method: "DELETE" });
   return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "מחיקת הפריט נכשלה") };
 }
 
 export async function createPipeline(input: { name: string }): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch("/api/config/pipelines", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const res = await fetch(apiUrl("/api/config/pipelines"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "הוספת הצינור נכשלה") };
 }
 export async function updatePipeline(id: number, patch: { name?: string; isDefault?: boolean; active?: boolean; order?: number }): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/config/pipelines/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  const res = await fetch(apiUrl(`/api/config/pipelines/${id}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
   return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "עדכון הצינור נכשל") };
 }
 export async function deletePipeline(id: number): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/config/pipelines/${id}`, { method: "DELETE" });
+  const res = await fetch(apiUrl(`/api/config/pipelines/${id}`), { method: "DELETE" });
   return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "מחיקת הצינור נכשלה") };
 }
 
 export async function createStage(input: { pipelineId: number; label: string; color?: string | null; probability?: number; isWon?: boolean; isLost?: boolean }): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch("/api/config/stages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const res = await fetch(apiUrl("/api/config/stages"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "הוספת השלב נכשלה") };
 }
 export async function updateStage(id: number, patch: { label?: string; color?: string | null; probability?: number; isWon?: boolean; isLost?: boolean; order?: number; active?: boolean }): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/config/stages/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  const res = await fetch(apiUrl(`/api/config/stages/${id}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
   return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "עדכון השלב נכשל") };
 }
 export async function deleteStage(id: number): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/config/stages/${id}`, { method: "DELETE" });
+  const res = await fetch(apiUrl(`/api/config/stages/${id}`), { method: "DELETE" });
   return res.ok ? { ok: true } : { ok: false, message: await msgOr(res, "מחיקת השלב נכשלה") };
 }
 
@@ -150,7 +156,7 @@ export interface DashboardStats {
   deals: { count: number; value: number; won: number; winRate: number };
 }
 export async function fetchStats(): Promise<DashboardStats> {
-  const res = await fetch("/api/stats", { cache: "no-store" });
+  const res = await fetch(apiUrl("/api/stats"), { cache: "no-store" });
   return (await jsonOrThrow(res)) as DashboardStats;
 }
 
@@ -179,24 +185,24 @@ export async function fetchTasks(params: { status?: string; q?: string } = {}): 
   const qs = new URLSearchParams();
   if (params.status && params.status !== "all") qs.set("status", params.status);
   if (params.q) qs.set("q", params.q);
-  const res = await fetch(`/api/tasks?${qs}`, { cache: "no-store" });
+  const res = await fetch(apiUrl(`/api/tasks?${qs}`), { cache: "no-store" });
   const body = (await jsonOrThrow(res)) as { data: ApiTask[] };
   return (body.data ?? []).map(toUITask);
 }
 export async function createTask(input: TaskInput): Promise<{ ok: boolean; task?: CrmTask; message?: string }> {
-  const res = await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const res = await fetch(apiUrl("/api/tasks"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   if (res.ok) return { ok: true, task: toUITask((await res.json()) as ApiTask) };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת המשימה נכשלה" };
 }
 export async function updateTask(id: number, patch: Partial<TaskInput>): Promise<{ ok: boolean; task?: CrmTask; message?: string }> {
-  const res = await fetch(`/api/tasks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  const res = await fetch(apiUrl(`/api/tasks/${id}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
   if (res.ok) return { ok: true, task: toUITask((await res.json()) as ApiTask) };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "עדכון המשימה נכשל" };
 }
 export async function deleteTask(id: number): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+  const res = await fetch(apiUrl(`/api/tasks/${id}`), { method: "DELETE" });
   if (res.ok) return { ok: true };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת המשימה נכשלה" };
@@ -227,24 +233,24 @@ export interface CalendarEventInput {
 export async function fetchCalendarEvents(params: { assigneeId?: number } = {}): Promise<CrmCalendarEvent[]> {
   const qs = new URLSearchParams();
   if (params.assigneeId) qs.set("assigneeId", String(params.assigneeId));
-  const res = await fetch(`/api/calendar?${qs}`, { cache: "no-store" });
+  const res = await fetch(apiUrl(`/api/calendar?${qs}`), { cache: "no-store" });
   const body = (await jsonOrThrow(res)) as { data: ApiCalendarEvent[] };
   return (body.data ?? []).map(toUIEvent);
 }
 export async function createCalendarEvent(input: CalendarEventInput): Promise<{ ok: boolean; event?: CrmCalendarEvent; message?: string }> {
-  const res = await fetch("/api/calendar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const res = await fetch(apiUrl("/api/calendar"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   if (res.ok) return { ok: true, event: toUIEvent((await res.json()) as ApiCalendarEvent) };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת האירוע נכשלה" };
 }
 export async function updateCalendarEvent(id: number, patch: Partial<CalendarEventInput>): Promise<{ ok: boolean; event?: CrmCalendarEvent; message?: string }> {
-  const res = await fetch(`/api/calendar/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  const res = await fetch(apiUrl(`/api/calendar/${id}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
   if (res.ok) return { ok: true, event: toUIEvent((await res.json()) as ApiCalendarEvent) };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "עדכון האירוע נכשל" };
 }
 export async function deleteCalendarEvent(id: number): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/calendar/${id}`, { method: "DELETE" });
+  const res = await fetch(apiUrl(`/api/calendar/${id}`), { method: "DELETE" });
   if (res.ok) return { ok: true };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת האירוע נכשלה" };
@@ -266,7 +272,7 @@ export interface SalesAnalytics {
 export async function fetchAnalytics(params: { pipelineId?: number } = {}): Promise<SalesAnalytics> {
   const qs = new URLSearchParams();
   if (params.pipelineId) qs.set("pipelineId", String(params.pipelineId));
-  const res = await fetch(`/api/analytics?${qs}`, { cache: "no-store" });
+  const res = await fetch(apiUrl(`/api/analytics?${qs}`), { cache: "no-store" });
   return (await jsonOrThrow(res)) as SalesAnalytics;
 }
 
@@ -286,7 +292,7 @@ export interface ProjectAnalytics {
   byResearchType: BillingGroup[];
 }
 export async function fetchProjectAnalytics(): Promise<ProjectAnalytics> {
-  const res = await fetch("/api/analytics/projects", { cache: "no-store" });
+  const res = await fetch(apiUrl("/api/analytics/projects"), { cache: "no-store" });
   return (await jsonOrThrow(res)) as ProjectAnalytics;
 }
 
@@ -309,13 +315,13 @@ export async function fetchLeads(params: { status?: string; q?: string } = {}): 
   if (params.status && params.status !== "all") qs.set("status", params.status);
   if (params.q) qs.set("q", params.q);
   qs.set("limit", "100");
-  const res = await fetch(`/api/leads?${qs.toString()}`, { cache: "no-store" });
+  const res = await fetch(apiUrl(`/api/leads?${qs.toString()}`), { cache: "no-store" });
   const body = (await jsonOrThrow(res)) as { data: ApiLead[] };
   return (body.data ?? []).map(toUILead);
 }
 
 export async function createLead(input: LeadCreateInput): Promise<LeadCreateResult> {
-  const res = await fetch("/api/leads", {
+  const res = await fetch(apiUrl("/api/leads"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -327,7 +333,7 @@ export async function createLead(input: LeadCreateInput): Promise<LeadCreateResu
 }
 
 export async function deleteLead(id: number): Promise<boolean> {
-  const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
+  const res = await fetch(apiUrl(`/api/leads/${id}`), { method: "DELETE" });
   return res.ok;
 }
 
@@ -337,7 +343,7 @@ export interface LeadUpdateInput {
   assigneeId?: number; clientId?: number | null; contactId?: number | null;
 }
 export async function updateLead(id: number, patch: LeadUpdateInput): Promise<{ ok: boolean; lead?: Lead; message?: string }> {
-  const res = await fetch(`/api/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  const res = await fetch(apiUrl(`/api/leads/${id}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
   if (res.ok) return { ok: true, lead: toUILead((await res.json()) as ApiLead) };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "עדכון הליד נכשל" };
@@ -363,13 +369,13 @@ export interface UserInput {
 }
 
 export async function fetchUsers(): Promise<CrmUser[]> {
-  const res = await fetch("/api/users", { cache: "no-store" });
+  const res = await fetch(apiUrl("/api/users"), { cache: "no-store" });
   const body = (await jsonOrThrow(res)) as { data: CrmUser[] };
   return body.data ?? [];
 }
 
 export async function createUser(input: UserInput): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch("/api/users", {
+  const res = await fetch(apiUrl("/api/users"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -381,7 +387,7 @@ export async function createUser(input: UserInput): Promise<{ ok: boolean; messa
 }
 
 export async function updateUser(id: number, patch: Partial<UserInput> & { password?: string | null }): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/users/${id}`, {
+  const res = await fetch(apiUrl(`/api/users/${id}`), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -392,7 +398,7 @@ export async function updateUser(id: number, patch: Partial<UserInput> & { passw
 }
 
 export async function deleteUser(id: number): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
+  const res = await fetch(apiUrl(`/api/users/${id}`), { method: "DELETE" });
   if (res.ok) return { ok: true };
   const body = await res.json().catch(() => ({}));
   return { ok: false, message: typeof body?.error === "string" ? body.error : "מחיקת המשתמש נכשלה" };
@@ -424,14 +430,14 @@ export interface ClientCreateInput {
   website?: string; size?: string; status?: "active" | "prospect"; notes?: string; assigneeId?: number;
 }
 export async function createClient(input: ClientCreateInput): Promise<{ ok: boolean; id?: number; message?: string; existingId?: number }> {
-  const res = await fetch("/api/clients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const res = await fetch(apiUrl("/api/clients"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   if (res.ok) { const c = (await res.json()) as { id: number }; return { ok: true, id: c.id }; }
   const b = await res.json().catch(() => ({}));
   if (res.status === 409) return { ok: false, message: "לקוח עם שם זה כבר קיים במערכת", existingId: typeof b?.existingId === "number" ? b.existingId : undefined };
   return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת הלקוח נכשלה" };
 }
 export async function deleteClient(id: number): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/clients/${id}`, { method: "DELETE" });
+  const res = await fetch(apiUrl(`/api/clients/${id}`), { method: "DELETE" });
   if (res.ok) return { ok: true };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת הלקוח נכשלה" };
@@ -442,7 +448,7 @@ export async function fetchClients(params: { q?: string; page?: number; limit?: 
   if (params.q) qs.set("q", params.q);
   qs.set("page", String(params.page ?? 1));
   qs.set("limit", String(params.limit ?? 60));
-  const res = await fetch(`/api/clients?${qs}`, { cache: "no-store" });
+  const res = await fetch(apiUrl(`/api/clients?${qs}`), { cache: "no-store" });
   const body = (await jsonOrThrow(res)) as Page<ApiClient>;
   return { ...body, data: (body.data ?? []).map(toUIClient) };
 }
@@ -471,7 +477,7 @@ export interface ProjectCreateInput {
   model?: string; methodology?: string; statusText?: string; billing?: number;
 }
 export async function createProject(input: ProjectCreateInput): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const res = await fetch(apiUrl("/api/projects"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   if (res.ok) return { ok: true };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת הפרויקט נכשלה" };
@@ -482,7 +488,7 @@ export async function fetchProjects(params: { q?: string; page?: number; limit?:
   if (params.q) qs.set("q", params.q);
   qs.set("page", String(params.page ?? 1));
   qs.set("limit", String(params.limit ?? 60));
-  const res = await fetch(`/api/projects?${qs}`, { cache: "no-store" });
+  const res = await fetch(apiUrl(`/api/projects?${qs}`), { cache: "no-store" });
   const body = (await jsonOrThrow(res)) as Page<ApiProject>;
   return { ...body, data: (body.data ?? []).map(toUIProject) };
 }
@@ -506,7 +512,7 @@ export interface ProjectPatch {
 }
 export const updateProject = (id: number, patch: ProjectPatch) => patchOk(`/api/projects/${id}`, patch);
 export async function deleteProject(id: number): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+  const res = await fetch(apiUrl(`/api/projects/${id}`), { method: "DELETE" });
   if (res.ok) return { ok: true };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת הפרויקט נכשלה" };
@@ -531,21 +537,21 @@ export async function fetchDeals(params: { pipelineId?: number } = {}): Promise<
   const qs = new URLSearchParams();
   if (params.pipelineId) qs.set("pipelineId", String(params.pipelineId));
   qs.set("limit", "100");
-  const res = await fetch(`/api/deals?${qs}`, { cache: "no-store" });
+  const res = await fetch(apiUrl(`/api/deals?${qs}`), { cache: "no-store" });
   const body = (await jsonOrThrow(res)) as Page<ApiDeal>;
   return (body.data ?? []).map(toUIDeal);
 }
 
 export interface DealInput { title: string; company: string; value: number; probability?: number; pipelineId: number; stageId: number; clientId?: number }
 export async function createDeal(input: DealInput): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch("/api/deals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const res = await fetch(apiUrl("/api/deals"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   if (res.ok) return { ok: true };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת העסקה נכשלה" };
 }
 export const updateDealStage = (id: number, stageId: number) => patchOk(`/api/deals/${id}`, { stageId });
 export async function deleteDeal(id: number): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/deals/${id}`, { method: "DELETE" });
+  const res = await fetch(apiUrl(`/api/deals/${id}`), { method: "DELETE" });
   if (res.ok) return { ok: true };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת העסקה נכשלה" };
@@ -568,19 +574,19 @@ export async function fetchContacts(params: { q?: string; clientId?: number; pag
   if (params.clientId) qs.set("clientId", String(params.clientId));
   qs.set("page", String(params.page ?? 1));
   qs.set("limit", String(params.limit ?? 60));
-  const res = await fetch(`/api/contacts?${qs}`, { cache: "no-store" });
+  const res = await fetch(apiUrl(`/api/contacts?${qs}`), { cache: "no-store" });
   const body = (await jsonOrThrow(res)) as Page<CrmContactRow>;
   return body;
 }
 export async function createContact(input: ContactInput): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch("/api/contacts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const res = await fetch(apiUrl("/api/contacts"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   if (res.ok) return { ok: true };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת איש הקשר נכשלה" };
 }
 export const updateContact = (id: number, patch: Partial<ContactInput>) => patchOk(`/api/contacts/${id}`, patch);
 export async function deleteContact(id: number): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch(`/api/contacts/${id}`, { method: "DELETE" });
+  const res = await fetch(apiUrl(`/api/contacts/${id}`), { method: "DELETE" });
   if (res.ok) return { ok: true };
   const b = await res.json().catch(() => ({}));
   return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת איש הקשר נכשלה" };

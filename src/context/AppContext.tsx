@@ -56,7 +56,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setImpersonating(null);
-    signOut({ callbackUrl: "/login" });
+    // Prefix explicitly — next-auth callbackUrl resolution is basePath-unaware.
+    signOut({ callbackUrl: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/login` });
   };
 
   const startImpersonate = (user: User) => setImpersonating(user);
