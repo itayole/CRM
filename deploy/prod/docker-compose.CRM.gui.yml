@@ -1,0 +1,36 @@
+# ── SalesFlow CRM (PRODUCTION) — Container Station (GUI) version ─────────────
+# Paste this into Container Station → Applications → Create on the QNAP.
+# Env is INLINE. Before deploying, replace the two <PLACEHOLDER> values:
+#   <DB_PASSWORD>      — the salesflow_app SQL password (current/rotated one)
+#   <NEXTAUTH_SECRET>  — a fresh random string (openssl rand -base64 32);
+#                        use a DIFFERENT one than CRM_test.
+#
+# NOTE: DATABASE_URL uses a DOUBLE backslash (\\) before the instance — YAML
+# collapses it to a single backslash at runtime.
+#
+# The image is PRIVATE on ghcr.io — add registry credentials in Container
+# Station (Preferences → Registry: ghcr.io + GitHub PAT with read:packages).
+services:
+  crm:
+    image: ghcr.io/itayole/salesflow-crm:latest
+    container_name: salesflow-crm
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "sqlserver://172.28.10.2\\MFILES_SQL;database=SalesFlowCRM;user=salesflow_app;password=<DB_PASSWORD>;encrypt=true;trustServerCertificate=true"
+      NEXTAUTH_SECRET: "<NEXTAUTH_SECRET>"
+      NEXTAUTH_URL: "http://192.168.1.197:3000"
+      LDAP_URL: "ldap://172.28.10.1:389"
+      LDAP_UPN_SUFFIX: "shiluv.co.il"
+      LDAP_NETBIOS: "SHILUV"
+      LDAP_BIND_MODE: "upn"
+      LDAP_TLS_REJECT_UNAUTHORIZED: "true"
+      LDAP_AUTO_PROVISION: "false"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
