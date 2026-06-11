@@ -37,40 +37,48 @@ export const authOptions: NextAuthOptions = {
       // Hybrid auth: a local bcrypt password (if the row has one) OR an AD/LDAP
       // bind. Either path is accepted, so an admin with a manual password can
       // log in even while LDAPS is still being enabled.
+      // Any thrown error here (e.g. Prisma connection failures naming the SQL
+      // server and login) would be forwarded by next-auth into the client-visible
+      // error redirect URL — so never let raw errors escape this function.
       async authorize(credentials) {
-        const login = credentials?.email?.trim();
-        const password = credentials?.password;
-        if (!login || !password) return null;
+        try {
+          const login = credentials?.email?.trim();
+          const password = credentials?.password;
+          if (!login || !password) return null;
 
-        let user = await prisma.user.findUnique({ where: { email: login } });
+          let user = await prisma.user.findUnique({ where: { email: login } });
 
-        // Inactive accounts are never allowed, regardless of auth method.
-        if (user && !user.active) return null;
+          // Inactive accounts are never allowed, regardless of auth method.
+          if (user && !user.active) return null;
 
-        // 1) Local password — only if this row actually has a hash set.
-        if (user?.password) {
-          const ok = await bcrypt.compare(password, user.password);
-          if (ok) return finalize(user);
-        }
-
-        // 2) AD / LDAP bind.
-        if (ldapEnabled() && (await ldapAuthenticate(login, password))) {
-          if (!user) {
-            if (!AUTO_PROVISION) return null;
-            user = await prisma.user.create({
-              data: {
-                name: login.split("@")[0],
-                email: login,
-                role: "sales_rep",
-                active: true,
-                password: null,
-              },
-            });
+          // 1) Local password — only if this row actually has a hash set.
+          if (user?.password) {
+            const ok = await bcrypt.compare(password, user.password);
+            if (ok) return finalize(user);
           }
-          return finalize(user);
-        }
 
-        return null;
+          // 2) AD / LDAP bind.
+          if (ldapEnabled() && (await ldapAuthenticate(login, password))) {
+            if (!user) {
+              if (!AUTO_PROVISION) return null;
+              user = await prisma.user.create({
+                data: {
+                  name: login.split("@")[0],
+                  email: login,
+                  role: "sales_rep",
+                  active: true,
+                  password: null,
+                },
+              });
+            }
+            return finalize(user);
+          }
+
+          return null;
+        } catch (err) {
+          console.error("authorize() failed:", err);
+          return null;
+        }
       },
     }),
   ],
