@@ -23,7 +23,7 @@ cat > .env.test <<EOF
 NODE_ENV=production
 DATABASE_URL=sqlserver://172.28.10.2\MFILES_SQL;database=SalesFlowCRM_test;user=salesflow_app;password=${DBPASS};encrypt=true;trustServerCertificate=true
 NEXTAUTH_SECRET=${SECRET}
-NEXTAUTH_URL=http://crm-test.shiluv.co.il
+NEXTAUTH_URL=http://192.168.1.197:3001
 LDAP_URL=ldap://172.28.10.1:389
 LDAP_UPN_SUFFIX=shiluv.co.il
 LDAP_NETBIOS=SHILUV
