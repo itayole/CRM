@@ -168,7 +168,7 @@ export default function ClientsPage() {
           <Btn onClick={openCreate}>+ לקוח חדש</Btn>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8, marginBottom: 12 }}>
           <Stat label="סה״כ לקוחות" value={total.toLocaleString()} color={NAVY} />
           <Stat label="עם פרויקטים" value={`${rows.filter(c => c.projectCount > 0).length} / ${rows.length}`} sub="מתוך המוצגים" color={OK} />
           <Stat label="עם אנשי קשר" value={`${rows.filter(c => c.contactCount > 0).length} / ${rows.length}`} sub="מתוך המוצגים" color={GOLD} />

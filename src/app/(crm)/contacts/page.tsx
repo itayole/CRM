@@ -166,7 +166,7 @@ export default function ContactsPage() {
           <Btn onClick={openCreate}>+ איש קשר חדש</Btn>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8, marginBottom: 12 }}>
           <Stat label="סה״כ אנשי קשר" value={total.toLocaleString()} color={NAVY} />
           <Stat label="מקושרים ללקוח" value={rows.filter(c => c.client).length} sub="מתוך המוצגים" color={OK} />
           <Stat label="רשומים לדיוור" value={rows.filter(c => c.newsletter).length} sub="מתוך המוצגים" color={GOLD} />

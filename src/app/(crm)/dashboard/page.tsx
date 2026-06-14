@@ -29,7 +29,7 @@ export default function DashboardPage() {
       <PageTitle title="לוח בקרה" sub="נתונים חיים מתוך מערכת ה-CRM" />
 
       {/* KPI row — live entity counts */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 8, marginBottom: 16 }}>
         <Stat label="לקוחות" value={s.counts.clients.toLocaleString()} color={NAVY} />
         <Stat label="פרויקטים" value={s.counts.projects.toLocaleString()} sub={`חיוב מצטבר: ${fmt(s.totalProjectBilling)}`} color={BLUE} />
         <Stat label="אנשי קשר" value={s.counts.contacts.toLocaleString()} color={GOLD} />
@@ -37,7 +37,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 12, marginBottom: 12 }}>
         <Card style={{ padding: 14 }}>
           <div style={{ fontWeight: 700, color: TEXT, marginBottom: 10, fontSize: 12 }}>פרויקטים לפי מתודולוגיה</div>
           {methodologyData.length === 0 ? <div style={{ color: MUTED, fontSize: 12, padding: 20, textAlign: "center" }}>אין נתונים</div> : methodologyData.map((m, i) => (
@@ -69,7 +69,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Top clients + recent projects */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 12 }}>
         <Card style={{ padding: 14 }}>
           <div style={{ fontWeight: 700, color: TEXT, marginBottom: 10, fontSize: 12 }}>לקוחות מובילים (לפי מס׳ פרויקטים)</div>
           {s.topClients.map((c, i) => (

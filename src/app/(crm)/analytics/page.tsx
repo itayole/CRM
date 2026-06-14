@@ -42,7 +42,7 @@ function ProjectsTab() {
 
   return (
     <>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 8, marginBottom: 16 }}>
         <Stat label="הכנסות ממומשות" value={fmt(a.won.billing)} sub={`${a.won.count.toLocaleString()} פרויקטים פעילים/מאושרים`} color={OK} />
         <Stat label="Pipeline פתוח" value={fmt(a.open.billing)} sub={`${a.open.count.toLocaleString()} בהצעה/ממתינים`} color={NAVY} />
         <Stat label="שיעור זכייה" value={`${a.winRate}%`} sub={`אבדו: ${fmt(a.lost.billing)} (${a.lost.count.toLocaleString()})`} color={BLUE} />
@@ -50,7 +50,7 @@ function ProjectsTab() {
       </div>
       <div style={{ fontSize: 11, color: MUTED, marginBottom: 12 }}>הפילוחים שלהלן משקפים הכנסות ממומשות (פרויקטים בעבודה / שאושרו).</div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 12, marginBottom: 12 }}>
         <Card style={{ padding: 14 }}>
           <div style={{ fontWeight: 700, color: TEXT, marginBottom: 10, fontSize: 12 }}>חיוב לפי מתודולוגיה</div>
           {methodology.length === 0 ? <Empty /> : methodology.map((m, i) => (
@@ -78,7 +78,7 @@ function ProjectsTab() {
         </Card>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 12, marginBottom: 12 }}>
         <Card style={{ padding: 14 }}>
           <div style={{ fontWeight: 700, color: TEXT, marginBottom: 10, fontSize: 12 }}>לקוחות מובילים לפי חיוב</div>
           {a.byClient.length === 0 ? <Empty /> : a.byClient.map((c, i) => (
@@ -146,7 +146,7 @@ function SalesTab() {
 
   return (
     <>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 8, marginBottom: 16 }}>
         <Stat label="שווי Pipeline פתוח" value={fmt(k.openValue)} sub={`${k.openCount} עסקאות פתוחות`} color={NAVY} />
         <Stat label="הכנסות (עסקאות שנסגרו)" value={fmt(k.wonValue)} sub={`${k.wonCount} עסקאות זכייה`} color={OK} />
         <Stat label="שיעור זכייה" value={`${k.winRate}%`} sub={`מתוך ${k.wonCount + k.lostCount} שנסגרו`} color={BLUE} />

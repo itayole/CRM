@@ -226,7 +226,7 @@ export default function ProjectsPage() {
           <Btn onClick={openCreate}>+ פרויקט חדש</Btn>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8, marginBottom: 12 }}>
           <Stat label="סה״כ פרויקטים" value={total.toLocaleString()} color={NAVY} />
           <Stat label="מקושרים ללקוח" value={rows.filter(p => p.client).length} sub="מתוך המוצגים" color={OK} />
           <Stat label="חיוב (מוצגים)" value={fmt(billingShown)} color={GOLD} />
