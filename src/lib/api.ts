@@ -349,6 +349,24 @@ export async function updateLead(id: number, patch: LeadUpdateInput): Promise<{ 
   return { ok: false, message: typeof b?.error === "string" ? b.error : "עדכון הליד נכשל" };
 }
 
+// Convert a lead into a research project. The lead is kept and marked
+// status="converted"; an activity entry recording the conversion is logged.
+export interface LeadConvertInput { name?: string; billing?: number; model?: string; methodology?: string }
+export async function convertLead(id: number, input: LeadConvertInput = {}): Promise<{ ok: boolean; projectId?: number; lead?: Lead; message?: string }> {
+  const res = await fetch(apiUrl(`/api/leads/${id}/convert`), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) { const b = (await res.json()) as { projectId: number; lead: ApiLead }; return { ok: true, projectId: b.projectId, lead: toUILead(b.lead) }; }
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "המרת הליד לפרויקט נכשלה" };
+}
+
+// Append a manual activity entry (note/call/email/meeting) to a lead.
+export async function addLeadActivity(id: number, input: { type: string; text: string }): Promise<{ ok: boolean; lead?: Lead; message?: string }> {
+  const res = await fetch(apiUrl(`/api/leads/${id}/activity`), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  if (res.ok) return { ok: true, lead: toUILead((await res.json()) as ApiLead) };
+  const b = await res.json().catch(() => ({}));
+  return { ok: false, message: typeof b?.error === "string" ? b.error : "הוספת הפעילות נכשלה" };
+}
+
 // ── Users (admin) ───────────────────────────────────────────────────────────
 export interface CrmUser {
   id: number;

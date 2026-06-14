@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Av, Bdg, Btn, Input, Select, Modal, FormRow, Field } from "@/components/ui";
-import { fetchLeads, createLead, updateLead, deleteLead, createClient, fetchContacts, createContact, fetchConfig, fetchActiveUsers, fetchClients, type AppConfig } from "@/lib/api";
+import { fetchLeads, createLead, updateLead, deleteLead, convertLead, addLeadActivity, createClient, fetchContacts, createContact, fetchConfig, fetchActiveUsers, fetchClients, type AppConfig } from "@/lib/api";
 import { fmt } from "@/lib/utils";
 import { LEAD_STATUS } from "@/lib/mockData";
 import { NAVY, GOLD_L, BLUE, SURF, WHITE, MUTED, TEXT, BORDER, OK, WARN, ERR } from "@/lib/tokens";
@@ -213,6 +213,44 @@ export default function LeadsPage() {
     else alert("מחיקת הליד נכשלה");
   };
 
+  // ── Convert lead → project ──────────────────────────────────────────────────
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [convertForm, setConvertForm] = useState({ name: "", billing: "" });
+  const [converting, setConverting] = useState(false);
+
+  const openConvert = (l: Lead) => {
+    setConvertForm({ name: l.company || l.name, billing: l.value ? String(l.value) : "" });
+    setConvertOpen(true);
+  };
+  const doConvert = async () => {
+    if (!sel) return;
+    if (!convertForm.name.trim()) { alert("שם הפרויקט הוא שדה חובה"); return; }
+    setConverting(true);
+    const res = await convertLead(sel.id, {
+      name: convertForm.name.trim(),
+      billing: parseFloat(convertForm.billing) || undefined,
+    });
+    setConverting(false);
+    if (!res.ok) { alert(res.message ?? "המרת הליד לפרויקט נכשלה"); return; }
+    setConvertOpen(false);
+    alert(`הליד הומר לפרויקט «${convertForm.name.trim()}» בהצלחה`);
+    reload();
+  };
+
+  // ── Manual activity logging ─────────────────────────────────────────────────
+  const [actText, setActText] = useState("");
+  const [actType, setActType] = useState("note");
+  const [actSaving, setActSaving] = useState(false);
+  const addActivity = async () => {
+    if (!sel || !actText.trim()) return;
+    setActSaving(true);
+    const res = await addLeadActivity(sel.id, { type: actType, text: actText.trim() });
+    setActSaving(false);
+    if (!res.ok) { alert(res.message ?? "הוספת הפעילות נכשלה"); return; }
+    setActText("");
+    reload();
+  };
+
   const filtered = leads.filter(l =>
     (filter === "all" || l.status === filter) &&
     (l.name.includes(search) || l.company.includes(search) || (l.email || "").includes(search) || (l.phone || "").includes(search))
@@ -367,6 +405,29 @@ export default function LeadsPage() {
         </Modal>
       )}
 
+      {/* Convert lead → project modal */}
+      {convertOpen && sel && (
+        <Modal title="🔄 המרת ליד לפרויקט" onClose={() => setConvertOpen(false)}>
+          <div style={{ fontSize: 11, color: MUTED, marginBottom: 12, lineHeight: 1.5 }}>
+            ייווצר פרויקט חדש שיירש את הלקוח, איש הקשר, הנציג והשווי מהליד «{sel.name}». הליד יישמר ויסומן כ-«הומר לפרויקט».
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <Field label="שם הפרויקט *">
+              <Input value={convertForm.name} onChange={v => setConvertForm(p => ({ ...p, name: v }))} placeholder="שם הפרויקט" style={{ width: "100%" }} />
+            </Field>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <Field label="שווי / היקף כספי (₪)">
+              <Input value={convertForm.billing} onChange={v => setConvertForm(p => ({ ...p, billing: v }))} placeholder="50000" type="number" style={{ width: "100%" }} />
+            </Field>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn onClick={doConvert} disabled={converting}>{converting ? "ממיר…" : "✓ צור פרויקט"}</Btn>
+            <Btn onClick={() => setConvertOpen(false)} variant="secondary">ביטול</Btn>
+          </div>
+        </Modal>
+      )}
+
       {/* Company-grouped list */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 11, flexShrink: 0 }}>
@@ -379,10 +440,10 @@ export default function LeadsPage() {
 
         <div style={{ display: "flex", gap: 7, marginBottom: 10, flexShrink: 0 }}>
           <Input value={search} onChange={setSearch} placeholder="🔍 חברה, שם, מייל, טלפון..." style={{ flex: 1 }} />
-          {(["all", "new", "contacted", "qualified", "disqualified"] as const).map(s => (
+          {(["all", "new", "contacted", "qualified", "disqualified", "converted"] as const).map(s => (
             <button key={s} onClick={() => setFilter(s)}
               style={{ padding: "7px 10px", borderRadius: 7, border: `1px solid ${filter === s ? NAVY : BORDER}`, background: filter === s ? NAVY : WHITE, color: filter === s ? WHITE : TEXT, fontSize: 11, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>
-              {{ all: "הכל", new: "חדש", contacted: "פנייה", qualified: "מוסמך", disqualified: "נפסל" }[s]}
+              {{ all: "הכל", new: "חדש", contacted: "פנייה", qualified: "מוסמך", disqualified: "נפסל", converted: "הומר" }[s]}
             </button>
           ))}
         </div>
@@ -519,10 +580,23 @@ export default function LeadsPage() {
                 <div style={{ fontSize: 11, color: TEXT, lineHeight: 1.5 }}>{sel.notes}</div>
               </div>
             )}
-            {(sel.activity || []).length > 0 && (
-              <div style={{ padding: "11px 15px" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 9 }}>יומן פעילות</div>
-                {(sel.activity || []).map((a, i) => (
+            <div style={{ padding: "11px 15px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 9 }}>יומן פעילות</div>
+              {/* Add-note composer */}
+              <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
+                <Select value={actType} onChange={setActType}
+                  options={[{ value: "note", label: "📝 הערה" }, { value: "call", label: "📞 שיחה" }, { value: "email", label: "✉ מייל" }, { value: "meeting", label: "🤝 פגישה" }]}
+                  style={{ width: 92, flexShrink: 0 }} />
+                <Input value={actText} onChange={setActText} placeholder="הוסף פעילות…" style={{ flex: 1 }} />
+                <button onClick={addActivity} disabled={actSaving || !actText.trim()}
+                  style={{ padding: "0 11px", background: NAVY, color: WHITE, border: "none", borderRadius: 7, fontWeight: 700, fontSize: 11, cursor: actSaving || !actText.trim() ? "default" : "pointer", opacity: actSaving || !actText.trim() ? 0.5 : 1, fontFamily: "inherit", flexShrink: 0 }}>
+                  {actSaving ? "…" : "הוסף"}
+                </button>
+              </div>
+              {(sel.activity || []).length === 0 ? (
+                <div style={{ fontSize: 11, color: MUTED, textAlign: "center", padding: "6px 0" }}>אין עדיין פעילות מתועדת</div>
+              ) : (
+                [...(sel.activity || [])].reverse().map((a, i) => (
                   <div key={i} style={{ display: "flex", gap: 7, marginBottom: 8 }}>
                     <div style={{ width: 22, height: 22, borderRadius: "50%", background: SURF, border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0 }}>
                       {ACT_ICONS[a.type] || "📌"}
@@ -532,15 +606,23 @@ export default function LeadsPage() {
                       <div style={{ fontSize: 10, color: MUTED }}>{a.time} · {a.user}</div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </div>
-          <div style={{ padding: "9px 14px", borderTop: `1px solid ${BORDER}`, display: "flex", gap: 5 }}>
-            <button style={{ flex: 1, padding: "7px 0", background: NAVY, color: WHITE, border: "none", borderRadius: 7, fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>✉ מייל</button>
-            <button style={{ flex: 1, padding: "7px 0", background: WHITE, color: NAVY, border: `1px solid ${NAVY}`, borderRadius: 7, fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>📞 שיחה</button>
-            <button onClick={() => remove(sel.id)}
-              style={{ padding: "7px 9px", background: WHITE, color: ERR, border: `1px solid ${BORDER}`, borderRadius: 7, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>🗑</button>
+          <div style={{ padding: "9px 14px", borderTop: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 6 }}>
+            {sel.status === "converted" ? (
+              <div style={{ padding: "7px 0", textAlign: "center", background: SURF, color: NAVY, border: `1px solid ${BORDER}`, borderRadius: 7, fontWeight: 700, fontSize: 11 }}>✓ הומר לפרויקט</div>
+            ) : (
+              <button onClick={() => openConvert(sel)}
+                style={{ padding: "8px 0", background: NAVY, color: WHITE, border: "none", borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>🔄 המר לפרויקט</button>
+            )}
+            <div style={{ display: "flex", gap: 5 }}>
+              <button style={{ flex: 1, padding: "7px 0", background: WHITE, color: NAVY, border: `1px solid ${NAVY}`, borderRadius: 7, fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>✉ מייל</button>
+              <button style={{ flex: 1, padding: "7px 0", background: WHITE, color: NAVY, border: `1px solid ${NAVY}`, borderRadius: 7, fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>📞 שיחה</button>
+              <button onClick={() => remove(sel.id)}
+                style={{ padding: "7px 9px", background: WHITE, color: ERR, border: `1px solid ${BORDER}`, borderRadius: 7, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>🗑</button>
+            </div>
           </div>
         </div>
       )}

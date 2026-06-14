@@ -14,7 +14,7 @@ export interface Lead {
   company: string;
   email: string;
   phone: string;
-  status: "new" | "contacted" | "qualified" | "disqualified";
+  status: "new" | "contacted" | "qualified" | "disqualified" | "converted";
   score: number;
   value: number;
   source: string;

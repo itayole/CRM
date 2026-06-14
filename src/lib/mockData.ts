@@ -35,6 +35,7 @@ export const LEAD_STATUS: Record<string, { label: string; color: string }> = {
   contacted:    { label: "פנייה", color: WARN },
   qualified:    { label: "מוסמך", color: OK },
   disqualified: { label: "נפסל",  color: ERR },
+  converted:    { label: "הומר לפרויקט", color: NAVY },
 };
 
 export const EVENT_TYPES: Record<string, { label: string; color: string }> = {
