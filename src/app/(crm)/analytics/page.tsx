@@ -33,8 +33,10 @@ function ProjectsTab() {
   if (err) return <div style={{ color: ERR, fontSize: 12 }}>⚠ {err}</div>;
   if (!a) return <div style={{ color: MUTED, fontSize: 12 }}>טוען נתונים…</div>;
 
-  const methodologyData = a.byMethodology.map(m => ({ name: m.name, value: m.billing }));
-  const managerData = a.byManager.map(m => ({ name: m.name, value: m.billing }));
+  const methodology = [...a.byMethodology].sort((x, y) => y.billing - x.billing);
+  const managers = [...a.byManager].sort((x, y) => y.billing - x.billing);
+  const maxMethodology = Math.max(1, ...methodology.map(m => m.billing));
+  const maxManager = Math.max(1, ...managers.map(m => m.billing));
   const maxClient = Math.max(1, ...a.byClient.map(c => c.billing));
   const maxStatus = Math.max(1, ...a.byStatus.map(s => s.count));
 
@@ -51,34 +53,28 @@ function ProjectsTab() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <Card style={{ padding: 14 }}>
           <div style={{ fontWeight: 700, color: TEXT, marginBottom: 10, fontSize: 12 }}>חיוב לפי מתודולוגיה</div>
-          {methodologyData.length === 0 ? <Empty /> : (
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={methodologyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: MUTED }} />
-                <YAxis tick={{ fontSize: 10, fill: MUTED }} tickFormatter={(v: number) => "₪" + Math.round(v / 1000) + "K"} />
-                <Tooltip formatter={(v) => fmt(Number(v))} />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]} name="חיוב">
-                  {methodologyData.map((_, i) => <Cell key={i} fill={BARS[i % BARS.length]} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+          {methodology.length === 0 ? <Empty /> : methodology.map((m, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+              <div style={{ fontSize: 11, color: TEXT, minWidth: 110, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name}</div>
+              <div style={{ flex: 1, height: 16, background: SURF, borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ width: `${Math.round(m.billing / maxMethodology * 100)}%`, height: "100%", background: BARS[i % BARS.length], borderRadius: 3 }} />
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: NAVY, minWidth: 64, textAlign: "left" }}>{fmt(m.billing)}</div>
+            </div>
+          ))}
         </Card>
 
         <Card style={{ padding: 14 }}>
           <div style={{ fontWeight: 700, color: TEXT, marginBottom: 10, fontSize: 12 }}>חיוב לפי מנהל לקוח</div>
-          {managerData.length === 0 ? <Empty /> : (
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={managerData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: MUTED }} />
-                <YAxis tick={{ fontSize: 10, fill: MUTED }} tickFormatter={(v: number) => "₪" + Math.round(v / 1000) + "K"} />
-                <Tooltip formatter={(v) => fmt(Number(v))} />
-                <Bar dataKey="value" fill={NAVY} radius={[4, 4, 0, 0]} name="חיוב" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+          {managers.length === 0 ? <Empty /> : managers.map((m, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+              <div style={{ fontSize: 11, color: TEXT, minWidth: 110, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name}</div>
+              <div style={{ flex: 1, height: 16, background: SURF, borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ width: `${Math.round(m.billing / maxManager * 100)}%`, height: "100%", background: NAVY, borderRadius: 3 }} />
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: NAVY, minWidth: 64, textAlign: "left" }}>{fmt(m.billing)}</div>
+            </div>
+          ))}
         </Card>
       </div>
 
@@ -110,9 +106,11 @@ function ProjectsTab() {
         </Card>
       </div>
 
-      <Card style={{ padding: 14 }}>
-        <div style={{ fontWeight: 700, color: TEXT, marginBottom: 10, fontSize: 12 }}>פרויקטים לפי סוג מחקר</div>
-        {a.byResearchType.length === 0 ? <Empty /> : (
+      {/* Research-type breakdown is only shown when the data exists (researchTypeId
+          is unpopulated for M-Files-imported projects — an empty card is just noise). */}
+      {a.byResearchType.length > 0 && (
+        <Card style={{ padding: 14 }}>
+          <div style={{ fontWeight: 700, color: TEXT, marginBottom: 10, fontSize: 12 }}>פרויקטים לפי סוג מחקר</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {a.byResearchType.map((r, i) => (
               <div key={i} style={{ flex: "1 1 180px", background: SURF, borderRadius: 8, padding: "10px 12px", borderRight: `3px solid ${BARS[i % BARS.length]}` }}>
@@ -122,8 +120,8 @@ function ProjectsTab() {
               </div>
             ))}
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
     </>
   );
 }

@@ -6,7 +6,6 @@ import { fmt } from "@/lib/utils";
 import { fetchStats, type DashboardStats } from "@/lib/api";
 import { LEAD_STATUS } from "@/lib/mockData";
 import { NAVY, GOLD, BLUE, MUTED, TEXT, WHITE, BORDER, OK, SURF } from "@/lib/tokens";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const BARS = [NAVY, BLUE, GOLD, "#0891B2", "#7C3AED", "#059669"];
 
@@ -21,7 +20,8 @@ export default function DashboardPage() {
   if (err) return <PageShell><PageTitle title="לוח בקרה" /><div style={{ color: "#C0392B", fontSize: 12 }}>⚠ {err}</div></PageShell>;
   if (!s) return <PageShell><PageTitle title="לוח בקרה" /><div style={{ color: MUTED, fontSize: 12 }}>טוען נתונים…</div></PageShell>;
 
-  const methodologyData = s.projectsByMethodology.map(m => ({ name: m.methodology, value: m.count }));
+  const methodologyData = [...s.projectsByMethodology].sort((a, b) => b.count - a.count);
+  const maxMethod = Math.max(1, ...methodologyData.map(m => m.count));
   const maxLead = Math.max(1, ...s.leadsByStatus.map(l => l.count));
 
   return (
@@ -40,19 +40,15 @@ export default function DashboardPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <Card style={{ padding: 14 }}>
           <div style={{ fontWeight: 700, color: TEXT, marginBottom: 10, fontSize: 12 }}>פרויקטים לפי מתודולוגיה</div>
-          {methodologyData.length === 0 ? <div style={{ color: MUTED, fontSize: 12, padding: 20, textAlign: "center" }}>אין נתונים</div> : (
-            <ResponsiveContainer width="100%" height={170}>
-              <BarChart data={methodologyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: MUTED }} />
-                <YAxis tick={{ fontSize: 10, fill: MUTED }} allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {methodologyData.map((_, i) => <Cell key={i} fill={BARS[i % BARS.length]} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+          {methodologyData.length === 0 ? <div style={{ color: MUTED, fontSize: 12, padding: 20, textAlign: "center" }}>אין נתונים</div> : methodologyData.map((m, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+              <div style={{ fontSize: 11, color: TEXT, minWidth: 120, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.methodology}</div>
+              <div style={{ flex: 1, height: 16, background: SURF, borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ width: `${Math.round(m.count / maxMethod * 100)}%`, height: "100%", background: BARS[i % BARS.length], borderRadius: 3 }} />
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: NAVY, minWidth: 44, textAlign: "left" }}>{m.count.toLocaleString()}</div>
+            </div>
+          ))}
         </Card>
 
         <Card style={{ padding: 14 }}>
