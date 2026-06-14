@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Av, Stat, Input, Btn, Select, Modal, FormRow, Field } from "@/components/ui";
+import { Av, Stat, Input, Btn, Select, Modal, FormRow, Field, ViewToggle, type ListView } from "@/components/ui";
 import { fetchContacts, createContact, updateContact, deleteContact, fetchActiveUsers, fetchClients, type CrmContactRow } from "@/lib/api";
 import { NAVY, GOLD, GOLD_L, WHITE, MUTED, TEXT, BORDER, OK, WARN, ERR, SURF } from "@/lib/tokens";
 
@@ -18,6 +18,7 @@ export default function ContactsPage() {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("name_asc");
   const [statusFilter, setStatusFilter] = useState("");
+  const [view, setView] = useState<ListView>("cards");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [selected, setSelected] = useState<CrmContactRow | null>(null);
@@ -43,6 +44,9 @@ export default function ContactsPage() {
   }, [q, sort, statusFilter]);
 
   useEffect(() => { fetchActiveUsers().then(setUsers); }, []);
+  // Remember the user's card/table preference across visits.
+  useEffect(() => { const v = localStorage.getItem("contactsView"); if (v === "table" || v === "cards") setView(v); }, []);
+  const changeView = (v: ListView) => { setView(v); try { localStorage.setItem("contactsView", v); } catch { /* ignore */ } };
   // Reload page 1 whenever query/sort/status changes (debounced for typing).
   useEffect(() => {
     const t = setTimeout(() => load(1, false), q ? 300 : 0);
@@ -181,29 +185,62 @@ export default function ContactsPage() {
             { value: "company_asc", label: "מיון: חברה א׳→ת׳" },
           ]} />
           <Select value={statusFilter} onChange={setStatusFilter} options={[{ value: "", label: "סטטוס: הכל" }, ...STATUS]} />
+          <div style={{ marginInlineStart: "auto" }}><ViewToggle view={view} onChange={changeView} /></div>
         </div>
 
         {err && <div style={{ textAlign: "center", padding: 24, color: ERR, fontSize: 12 }}>⚠ {err} <button onClick={() => load(1, false)} style={{ marginRight: 8, textDecoration: "underline", background: "none", border: "none", color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>נסה שוב</button></div>}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 10 }}>
-          {rows.map(c => (
-            <div key={c.id} onClick={() => setSelected(selected?.id === c.id ? null : c)}
-              style={{ background: selected?.id === c.id ? GOLD_L : WHITE, border: `1px solid ${selected?.id === c.id ? GOLD : BORDER}`, borderRadius: 10, padding: 14, cursor: "pointer", position: "relative" }}>
-              <button onClick={e => { e.stopPropagation(); openEdit(c); }}
-                style={{ position: "absolute", top: 10, left: 10, fontSize: 10, padding: "3px 7px", border: `1px solid ${BORDER}`, borderRadius: 5, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך</button>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
-                <Av name={c.fullName || "?"} size={36} color={NAVY} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 13, color: TEXT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 150 }}>{c.fullName || "—"}</div>
-                  <div style={{ fontSize: 11, color: MUTED, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 170 }}>{c.client?.name || c.companyName || "—"}</div>
+        {view === "table" ? (
+          <div style={{ overflowX: "auto", border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: SURF }}>
+                  {["שם", "חברה / לקוח", "מייל", "נייד", "סטטוס", ""].map((h, i) => (
+                    <th key={i} style={{ padding: "9px 12px", textAlign: i === 4 ? "center" : "right", fontWeight: 700, color: MUTED, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(c => (
+                  <tr key={c.id} onClick={() => setSelected(selected?.id === c.id ? null : c)}
+                    style={{ borderTop: `1px solid ${BORDER}`, cursor: "pointer", background: selected?.id === c.id ? GOLD_L : WHITE }}>
+                    <td style={{ padding: "8px 12px", fontWeight: 700, color: TEXT, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.fullName || "—"}</td>
+                    <td style={{ padding: "8px 12px", color: TEXT, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.client?.name || c.companyName || "—"}</td>
+                    <td style={{ padding: "8px 12px", color: MUTED, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.email || "—"}</td>
+                    <td style={{ padding: "8px 12px", color: MUTED, whiteSpace: "nowrap" }}>{c.mobile || "—"}</td>
+                    <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: statusColor(c.status) + "22", color: statusColor(c.status), whiteSpace: "nowrap" }}>{statusLabel(c.status)}</span>
+                    </td>
+                    <td style={{ padding: "8px 12px", textAlign: "left", whiteSpace: "nowrap" }}>
+                      <button onClick={e => { e.stopPropagation(); openEdit(c); }}
+                        style={{ fontSize: 10, padding: "3px 8px", border: `1px solid ${BORDER}`, borderRadius: 5, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 10 }}>
+            {rows.map(c => (
+              <div key={c.id} onClick={() => setSelected(selected?.id === c.id ? null : c)}
+                style={{ background: selected?.id === c.id ? GOLD_L : WHITE, border: `1px solid ${selected?.id === c.id ? GOLD : BORDER}`, borderRadius: 10, padding: 14, cursor: "pointer", position: "relative" }}>
+                <button onClick={e => { e.stopPropagation(); openEdit(c); }}
+                  style={{ position: "absolute", top: 10, left: 10, fontSize: 10, padding: "3px 7px", border: `1px solid ${BORDER}`, borderRadius: 5, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך</button>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
+                  <Av name={c.fullName || "?"} size={36} color={NAVY} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: TEXT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 150 }}>{c.fullName || "—"}</div>
+                    <div style={{ fontSize: 11, color: MUTED, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 170 }}>{c.client?.name || c.companyName || "—"}</div>
+                  </div>
                 </div>
+                {c.email && <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>✉ {c.email}</div>}
+                {c.mobile && <div style={{ fontSize: 10, color: MUTED, marginBottom: 6 }}>📞 {c.mobile}</div>}
+                <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: statusColor(c.status) + "22", color: statusColor(c.status) }}>{statusLabel(c.status)}</span>
               </div>
-              {c.email && <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>✉ {c.email}</div>}
-              {c.mobile && <div style={{ fontSize: 10, color: MUTED, marginBottom: 6 }}>📞 {c.mobile}</div>}
-              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: statusColor(c.status) + "22", color: statusColor(c.status) }}>{statusLabel(c.status)}</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {loading && <div style={{ textAlign: "center", padding: 20, color: MUTED, fontSize: 12 }}>טוען…</div>}
         {!loading && rows.length === 0 && !err && <div style={{ textAlign: "center", padding: 32, color: MUTED, fontSize: 12 }}>לא נמצאו אנשי קשר</div>}

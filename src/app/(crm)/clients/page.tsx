@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Av, Stat, Input, Btn, Select, Modal, FormRow, Field } from "@/components/ui";
+import { Av, Stat, Input, Btn, Select, Modal, FormRow, Field, ViewToggle, type ListView } from "@/components/ui";
 import { fetchClients, fetchClient, updateClient, createClient, deleteClient, fetchActiveUsers, type CrmClientRow } from "@/lib/api";
 import { useApp } from "@/context/AppContext";
 import { NAVY, GOLD, GOLD_L, WHITE, MUTED, TEXT, BORDER, OK, ERR, SURF } from "@/lib/tokens";
@@ -16,6 +16,7 @@ export default function ClientsPage() {
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("name_asc");
+  const [view, setView] = useState<ListView>("cards");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [selected, setSelected] = useState<CrmClientRow | null>(null);
@@ -40,6 +41,9 @@ export default function ClientsPage() {
   }, [q, sort]);
 
   useEffect(() => { fetchActiveUsers().then(setUsers); }, []);
+  // Remember the user's card/table preference across visits.
+  useEffect(() => { const v = localStorage.getItem("clientsView"); if (v === "table" || v === "cards") setView(v); }, []);
+  const changeView = (v: ListView) => { setView(v); try { localStorage.setItem("clientsView", v); } catch { /* ignore */ } };
   // Reload page 1 whenever the query/sort/filters change (debounced for typing).
   useEffect(() => {
     const t = setTimeout(() => load(1, false), q ? 300 : 0);
@@ -184,31 +188,62 @@ export default function ClientsPage() {
             { value: "contacts_desc", label: "מיון: הכי הרבה אנשי קשר" },
             { value: "recent", label: "מיון: נוספו לאחרונה" },
           ]} />
+          <div style={{ marginInlineStart: "auto" }}><ViewToggle view={view} onChange={changeView} /></div>
         </div>
 
         {err && <div style={{ textAlign: "center", padding: 24, color: ERR, fontSize: 12 }}>⚠ {err} <button onClick={() => load(1, false)} style={{ marginRight: 8, textDecoration: "underline", background: "none", border: "none", color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>נסה שוב</button></div>}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 10 }}>
-          {rows.map(c => (
-            <div key={c.id} onClick={() => setSelected(selected?.id === c.id ? null : c)}
-              style={{ background: selected?.id === c.id ? GOLD_L : WHITE, border: `1px solid ${selected?.id === c.id ? GOLD : BORDER}`, borderRadius: 10, padding: 14, cursor: "pointer", position: "relative" }}>
-              <button onClick={e => { e.stopPropagation(); openEdit(c); }}
-                style={{ position: "absolute", top: 10, left: 10, fontSize: 10, padding: "3px 7px", border: `1px solid ${BORDER}`, borderRadius: 5, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך</button>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
-                <Av name={c.name} size={38} color={NAVY} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 13, color: TEXT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 150 }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: MUTED }}>{c.industry || "—"}{c.assignee ? ` · ${c.assignee.name}` : ""}</div>
+        {view === "table" ? (
+          <div style={{ overflowX: "auto", border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: SURF }}>
+                  {["שם", "תעשייה", "מנהל לקוח", "פרויקטים", "אנשי קשר", ""].map((h, i) => (
+                    <th key={i} style={{ padding: "9px 12px", textAlign: i >= 3 && i <= 4 ? "center" : "right", fontWeight: 700, color: MUTED, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(c => (
+                  <tr key={c.id} onClick={() => setSelected(selected?.id === c.id ? null : c)}
+                    style={{ borderTop: `1px solid ${BORDER}`, cursor: "pointer", background: selected?.id === c.id ? GOLD_L : WHITE }}>
+                    <td style={{ padding: "8px 12px", fontWeight: 700, color: TEXT, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</td>
+                    <td style={{ padding: "8px 12px", color: MUTED, whiteSpace: "nowrap" }}>{c.industry || "—"}</td>
+                    <td style={{ padding: "8px 12px", color: TEXT, whiteSpace: "nowrap" }}>{c.assignee?.name || "—"}</td>
+                    <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: NAVY }}>{c.projectCount}</td>
+                    <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: GOLD }}>{c.contactCount}</td>
+                    <td style={{ padding: "8px 12px", textAlign: "left", whiteSpace: "nowrap" }}>
+                      <button onClick={e => { e.stopPropagation(); openEdit(c); }}
+                        style={{ fontSize: 10, padding: "3px 8px", border: `1px solid ${BORDER}`, borderRadius: 5, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 10 }}>
+            {rows.map(c => (
+              <div key={c.id} onClick={() => setSelected(selected?.id === c.id ? null : c)}
+                style={{ background: selected?.id === c.id ? GOLD_L : WHITE, border: `1px solid ${selected?.id === c.id ? GOLD : BORDER}`, borderRadius: 10, padding: 14, cursor: "pointer", position: "relative" }}>
+                <button onClick={e => { e.stopPropagation(); openEdit(c); }}
+                  style={{ position: "absolute", top: 10, left: 10, fontSize: 10, padding: "3px 7px", border: `1px solid ${BORDER}`, borderRadius: 5, background: WHITE, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>✎ ערוך</button>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
+                  <Av name={c.name} size={38} color={NAVY} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: TEXT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 150 }}>{c.name}</div>
+                    <div style={{ fontSize: 11, color: MUTED }}>{c.industry || "—"}{c.assignee ? ` · ${c.assignee.name}` : ""}</div>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+                  <div style={{ background: SURF, borderRadius: 6, padding: "6px 0", textAlign: "center" }}><div style={{ fontSize: 15, fontWeight: 800, color: NAVY }}>{c.projectCount}</div><div style={{ fontSize: 9, color: MUTED }}>פרויקטים</div></div>
+                  <div style={{ background: SURF, borderRadius: 6, padding: "6px 0", textAlign: "center" }}><div style={{ fontSize: 15, fontWeight: 800, color: GOLD }}>{c.contactCount}</div><div style={{ fontSize: 9, color: MUTED }}>אנשי קשר</div></div>
+                  <div style={{ background: SURF, borderRadius: 6, padding: "6px 0", textAlign: "center" }}><div style={{ fontSize: 15, fontWeight: 800, color: OK }}>{c.dealCount}</div><div style={{ fontSize: 9, color: MUTED }}>עסקאות</div></div>
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
-                <div style={{ background: SURF, borderRadius: 6, padding: "6px 0", textAlign: "center" }}><div style={{ fontSize: 15, fontWeight: 800, color: NAVY }}>{c.projectCount}</div><div style={{ fontSize: 9, color: MUTED }}>פרויקטים</div></div>
-                <div style={{ background: SURF, borderRadius: 6, padding: "6px 0", textAlign: "center" }}><div style={{ fontSize: 15, fontWeight: 800, color: GOLD }}>{c.contactCount}</div><div style={{ fontSize: 9, color: MUTED }}>אנשי קשר</div></div>
-                <div style={{ background: SURF, borderRadius: 6, padding: "6px 0", textAlign: "center" }}><div style={{ fontSize: 15, fontWeight: 800, color: OK }}>{c.dealCount}</div><div style={{ fontSize: 9, color: MUTED }}>עסקאות</div></div>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {loading && <div style={{ textAlign: "center", padding: 20, color: MUTED, fontSize: 12 }}>טוען…</div>}
         {!loading && rows.length === 0 && !err && <div style={{ textAlign: "center", padding: 32, color: MUTED, fontSize: 12 }}>לא נמצאו לקוחות</div>}

@@ -14,6 +14,21 @@ export function Av({ name, size = 34, color = BLUE }: { name: string; size?: num
   );
 }
 
+// ── Card / table view toggle ─────────────────────────────────────────────────
+export type ListView = "cards" | "table";
+export function ViewToggle({ view, onChange }: { view: ListView; onChange: (v: ListView) => void }) {
+  const btn = (active: boolean): React.CSSProperties => ({
+    padding: "7px 11px", fontSize: 13, lineHeight: 1, border: "none", cursor: "pointer",
+    background: active ? NAVY : WHITE, color: active ? WHITE : MUTED, fontFamily: "inherit",
+  });
+  return (
+    <div style={{ display: "flex", border: `1px solid ${BORDER}`, borderRadius: 7, overflow: "hidden" }}>
+      <button onClick={() => onChange("cards")} style={btn(view === "cards")} title="תצוגת כרטיסים" aria-label="תצוגת כרטיסים">▦</button>
+      <button onClick={() => onChange("table")} style={btn(view === "table")} title="תצוגת טבלה" aria-label="תצוגת טבלה">☰</button>
+    </div>
+  );
+}
+
 // ── Badge ────────────────────────────────────────────────────────────────────
 export function Bdg({ label, color = MUTED }: { label: string; color?: string }) {
   return <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: color + "22", color }}>{label}</span>;
