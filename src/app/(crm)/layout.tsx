@@ -31,10 +31,25 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   // Current month label — set after mount so server/client HTML match (no hydration warning).
   const [monthLabel, setMonthLabel] = useState("");
+  // Responsive sidebar: below 768px the navy bar becomes an off-canvas drawer
+  // (it's a fixed 190px otherwise, which on a phone swallows half the screen).
+  const [mobile, setMobile] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     setMonthLabel(new Date().toLocaleDateString("he-IL", { month: "long", year: "numeric" }));
   }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const apply = () => setMobile(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  // Close the drawer whenever the route changes.
+  useEffect(() => { setNavOpen(false); }, [pathname]);
 
   useEffect(() => {
     if (!authLoading && !currentUser) router.replace("/login");
@@ -44,6 +59,7 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
 
   const visibleNav = NAV.filter(item => !item.adminOnly || isAdmin);
   const currentId = pathname.replace("/", "") || "dashboard";
+  const bannerH = isImpersonating ? 36 : 0;
 
   return (
     <div style={{ display: "flex", height: "100vh", background: "#F7F6F3", fontFamily: "'Segoe UI','Helvetica Neue',Arial,sans-serif", direction: "rtl", color: TEXT, fontSize: 13 }}>
@@ -59,9 +75,23 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <div style={{ display: "flex", width: "100%", height: "100%", paddingTop: isImpersonating ? 36 : 0 }}>
-        {/* Sidebar */}
-        <div style={{ width: 190, background: NAVY, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+      <div style={{ display: "flex", width: "100%", height: "100%", paddingTop: bannerH }}>
+        {/* Backdrop — only on mobile while the drawer is open */}
+        {mobile && navOpen && (
+          <div onClick={() => setNavOpen(false)}
+            style={{ position: "fixed", top: bannerH, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.45)", zIndex: 55 }} />
+        )}
+
+        {/* Sidebar — static on desktop, off-canvas drawer on mobile */}
+        <div style={{
+          width: 190, background: NAVY, display: "flex", flexDirection: "column", flexShrink: 0,
+          ...(mobile ? {
+            position: "fixed", top: bannerH, bottom: 0, right: 0, zIndex: 60,
+            transform: navOpen ? "translateX(0)" : "translateX(100%)",
+            transition: "transform .22s ease",
+            boxShadow: navOpen ? "-4px 0 16px rgba(0,0,0,0.3)" : "none",
+          } : {}),
+        }}>
           <div style={{ padding: "14px 14px 10px", borderBottom: "1px solid " + BLUE }}>
             <div style={{ fontSize: 15, fontWeight: 900, color: WHITE }}>SalesFlow</div>
             <div style={{ fontSize: 9, color: GOLD, fontWeight: 600, letterSpacing: 1 }}>CRM · Shiluv I²R</div>
@@ -71,7 +101,7 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
             {visibleNav.map(item => {
               const active = pathname === item.href || (item.href === "/dashboard" && pathname === "/");
               return (
-                <Link key={item.id} href={item.href}
+                <Link key={item.id} href={item.href} onClick={() => setNavOpen(false)}
                   style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 9px", borderRadius: 6, background: active ? GOLD : "transparent", color: active ? NAVY : "#9DB5D8", fontSize: 11, fontWeight: active ? 700 : 500, width: "100%", textAlign: "right", whiteSpace: "nowrap", textDecoration: "none" }}>
                   <span style={{ fontSize: 13, width: 16, textAlign: "center", flexShrink: 0 }}>{item.icon}</span>
                   {item.label}
@@ -100,7 +130,11 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Top header */}
           <div style={{ height: 42, background: WHITE, borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", flexShrink: 0 }}>
-            <div style={{ fontSize: 11, color: MUTED }}>
+            <div style={{ fontSize: 11, color: MUTED, display: "flex", alignItems: "center", gap: 8 }}>
+              {mobile && (
+                <button onClick={() => setNavOpen(o => !o)} aria-label="פתח תפריט"
+                  style={{ background: "none", border: "none", fontSize: 18, lineHeight: 1, padding: 0, cursor: "pointer", color: NAVY, fontFamily: "inherit" }}>☰</button>
+              )}
               {visibleNav.find(n => pathname === n.href)?.icon} {visibleNav.find(n => pathname === n.href)?.label}
               {(!isAdmin || isImpersonating) && activeUser && (
                 <span style={{ marginRight: 10, fontSize: 10, background: NAVY + "22", color: NAVY, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
