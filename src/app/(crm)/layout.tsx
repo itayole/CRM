@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useApp } from "@/context/AppContext";
@@ -15,10 +15,11 @@ const NAV = [
   { id: "projects",     icon: "📁", label: "פרויקטים",     href: "/projects" },
   { id: "contacts",     icon: "👤", label: "אנשי קשר",    href: "/contacts" },
   { id: "analytics",   icon: "📊", label: "אנליטיקס",    href: "/analytics" },
-  { id: "automations", icon: "🔄", label: "אוטומציות",   href: "/automations", adminOnly: true },
   { id: "calendar",    icon: "📅", label: "יומן",         href: "/calendar" },
   { id: "tasks",       icon: "✅", label: "משימות",       href: "/tasks" },
-  { id: "integrations",icon: "🔌", label: "אינטגרציות",  href: "/integrations", adminOnly: true },
+  // Hidden until wired to real data — these pages currently show demo/mock content.
+  // { id: "automations", icon: "🔄", label: "אוטומציות",   href: "/automations", adminOnly: true },
+  // { id: "integrations",icon: "🔌", label: "אינטגרציות",  href: "/integrations", adminOnly: true },
   { id: "import",      icon: "⬆", label: "שאיבת תוכן",  href: "/import", adminOnly: true },
   { id: "users",       icon: "⚙", label: "משתמשים",      href: "/users", adminOnly: true },
   { id: "settings",    icon: "🛠", label: "הגדרות",       href: "/settings", adminOnly: true },
@@ -28,6 +29,12 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
   const { currentUser, authLoading, activeUser, isAdmin, isImpersonating, stopImpersonate, logout } = useApp();
   const router = useRouter();
   const pathname = usePathname();
+  // Current month label — set after mount so server/client HTML match (no hydration warning).
+  const [monthLabel, setMonthLabel] = useState("");
+
+  useEffect(() => {
+    setMonthLabel(new Date().toLocaleDateString("he-IL", { month: "long", year: "numeric" }));
+  }, []);
 
   useEffect(() => {
     if (!authLoading && !currentUser) router.replace("/login");
@@ -102,7 +109,7 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
               )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-              <div style={{ fontSize: 11, color: MUTED }}>מאי 2026</div>
+              <div style={{ fontSize: 11, color: MUTED }}>{monthLabel}</div>
               <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#1E8C5A" }} />
               <div style={{ fontSize: 11, color: "#1E8C5A", fontWeight: 600 }}>מחובר</div>
             </div>

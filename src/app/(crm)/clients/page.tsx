@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Av, Stat, Input, Btn, Select, Modal, FormRow, Field } from "@/components/ui";
-import { fetchClients, updateClient, createClient, deleteClient, fetchActiveUsers, type CrmClientRow } from "@/lib/api";
+import { fetchClients, fetchClient, updateClient, createClient, deleteClient, fetchActiveUsers, type CrmClientRow } from "@/lib/api";
 import { useApp } from "@/context/AppContext";
 import { NAVY, GOLD, GOLD_L, WHITE, MUTED, TEXT, BORDER, OK, ERR, SURF } from "@/lib/tokens";
 
@@ -53,14 +53,28 @@ export default function ClientsPage() {
     setEditErr("");
   };
 
-  const openEdit = (c: CrmClientRow) => {
+  const openEdit = async (c: CrmClientRow) => {
     setCreating(false);
     setEditId(c.id);
+    setEditErr("");
+    // Show the row data immediately so the modal isn't blank…
     setEditForm({
       name: c.name, industry: c.industry ?? "", email: c.email ?? "", phone: c.phone ?? "",
       address: "", website: "", status: c.status ?? "", assigneeId: c.assignee ? String(c.assignee.id) : "", notes: "",
     });
-    setEditErr("");
+    // …then hydrate address/website/notes from the full record. The list payload
+    // omits them, and saving without them would wipe those columns.
+    try {
+      const full = await fetchClient(c.id);
+      setEditForm(p => ({
+        ...p,
+        industry: full.industry ?? "", email: full.email ?? "", phone: full.phone ?? "",
+        address: full.address ?? "", website: full.website ?? "", status: full.status ?? "",
+        assigneeId: full.assigneeId ? String(full.assigneeId) : "", notes: full.notes ?? "",
+      }));
+    } catch {
+      /* keep the row-based prefill — still better than blank fields */
+    }
   };
 
   const closeModal = () => { setEditId(null); setCreating(false); };
@@ -91,7 +105,7 @@ export default function ClientsPage() {
         })
       : await updateClient(editId!, {
           name: editForm.name,
-          industry: editForm.industry || null,
+          industry: editForm.industry || undefined,
           email: editForm.email || null,
           phone: editForm.phone || null,
           address: editForm.address || null,
@@ -154,8 +168,8 @@ export default function ClientsPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
           <Stat label="סה״כ לקוחות" value={total.toLocaleString()} color={NAVY} />
-          <Stat label="עם פרויקטים" value={rows.filter(c => c.projectCount > 0).length} sub="מתוך המוצגים" color={OK} />
-          <Stat label="עם אנשי קשר" value={rows.filter(c => c.contactCount > 0).length} sub="מתוך המוצגים" color={GOLD} />
+          <Stat label="עם פרויקטים" value={`${rows.filter(c => c.projectCount > 0).length} / ${rows.length}`} sub="מתוך המוצגים" color={OK} />
+          <Stat label="עם אנשי קשר" value={`${rows.filter(c => c.contactCount > 0).length} / ${rows.length}`} sub="מתוך המוצגים" color={GOLD} />
         </div>
 
         <Input value={q} onChange={setQ} placeholder="🔍 חיפוש לקוח לפי שם / תעשייה / מייל..." style={{ width: "100%", marginBottom: 12 }} />

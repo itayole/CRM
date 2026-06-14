@@ -443,6 +443,18 @@ export async function deleteClient(id: number): Promise<{ ok: boolean; message?:
   return { ok: false, message: typeof b?.error === "string" ? b.error : "מחיקת הלקוח נכשלה" };
 }
 
+// Full client record (the list payload omits address/website/size/notes, so the
+// edit modal must hydrate them from here — otherwise a save would null them out).
+export interface CrmClientDetail {
+  id: number; name: string; industry: string | null; email: string | null; phone: string | null;
+  address: string | null; website: string | null; size: string | null; status: string | null;
+  notes: string | null; assigneeId: number | null;
+}
+export async function fetchClient(id: number): Promise<CrmClientDetail> {
+  const res = await fetch(apiUrl(`/api/clients/${id}`), { cache: "no-store" });
+  return (await jsonOrThrow(res)) as CrmClientDetail;
+}
+
 export async function fetchClients(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmClientRow>> {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
