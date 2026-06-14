@@ -17,6 +17,7 @@ export default function ProjectsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
+  const [sort, setSort] = useState("newest");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [sel, setSel] = useState<CrmProjectRow | null>(null);
@@ -32,10 +33,10 @@ export default function ProjectsPage() {
   const [contactResults, setContactResults] = useState<Named[]>([]);
   const [contactFocus, setContactFocus] = useState(false);
 
-  const load = useCallback(async (p: number, query: string, append: boolean) => {
+  const load = useCallback(async (p: number, append: boolean) => {
     setLoading(true); setErr("");
     try {
-      const res = await fetchProjects({ page: p, q: query, limit: 60 });
+      const res = await fetchProjects({ page: p, q, sort, limit: 60 });
       setTotal(res.total); setPage(res.page);
       setRows(prev => (append ? [...prev, ...res.data] : res.data));
     } catch (e) {
@@ -43,13 +44,14 @@ export default function ProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [q, sort]);
 
   useEffect(() => { fetchActiveUsers().then(setUsers); }, []);
+  // Reload page 1 whenever query/sort/assignee changes (debounced for typing).
   useEffect(() => {
-    const t = setTimeout(() => load(1, q, false), q ? 300 : 0);
+    const t = setTimeout(() => load(1, false), q ? 300 : 0);
     return () => clearTimeout(t);
-  }, [q, load]);
+  }, [load, q]);
 
   const canLoadMore = rows.length < total;
   const billingShown = rows.reduce((s, p) => s + (p.billing ?? 0), 0);
@@ -107,7 +109,7 @@ export default function ProjectsPage() {
     const res = await deleteProject(p.id);
     if (!res.ok) { alert(res.message ?? "מחיקת הפרויקט נכשלה"); return; }
     setSel(null);
-    load(1, q, false);
+    load(1, false);
   };
 
   const save = async () => {
@@ -136,7 +138,7 @@ export default function ProjectsPage() {
     setSaving(false);
     if (!res.ok) { setEditErr(res.message ?? "השמירה נכשלה"); return; }
     closeModal(); setSel(null);
-    load(1, q, false);
+    load(1, false);
   };
 
   return (
@@ -230,9 +232,20 @@ export default function ProjectsPage() {
           <Stat label="חיוב (מוצגים)" value={fmt(billingShown)} color={GOLD} />
         </div>
 
-        <Input value={q} onChange={setQ} placeholder="🔍 חיפוש פרויקט לפי שם / לקוח / מס׳ שילוב..." style={{ width: "100%", marginBottom: 12 }} />
+        <Input value={q} onChange={setQ} placeholder="🔍 חיפוש פרויקט לפי שם / לקוח / מס׳ שילוב..." style={{ width: "100%", marginBottom: 8 }} />
 
-        {err && <div style={{ textAlign: "center", padding: 24, color: ERR, fontSize: 12 }}>⚠ {err} <button onClick={() => load(1, q, false)} style={{ marginRight: 8, textDecoration: "underline", background: "none", border: "none", color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>נסה שוב</button></div>}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          <Select value={sort} onChange={setSort} options={[
+            { value: "newest", label: "מיון: חדשים (מס׳ ↓)" },
+            { value: "oldest", label: "מיון: ישנים (מס׳ ↑)" },
+            { value: "billing_desc", label: "מיון: חיוב גבוה→נמוך" },
+            { value: "billing_asc", label: "מיון: חיוב נמוך→גבוה" },
+            { value: "name_asc", label: "מיון: שם א׳→ת׳" },
+            { value: "updated", label: "מיון: עודכן לאחרונה" },
+          ]} />
+        </div>
+
+        {err && <div style={{ textAlign: "center", padding: 24, color: ERR, fontSize: 12 }}>⚠ {err} <button onClick={() => load(1, false)} style={{ marginRight: 8, textDecoration: "underline", background: "none", border: "none", color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>נסה שוב</button></div>}
 
         <div style={{ flex: 1, overflowY: "auto", border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -264,7 +277,7 @@ export default function ProjectsPage() {
           {!loading && rows.length === 0 && !err && <div style={{ textAlign: "center", padding: 32, color: MUTED, fontSize: 12 }}>לא נמצאו פרויקטים</div>}
           {!loading && canLoadMore && (
             <div style={{ textAlign: "center", padding: 14 }}>
-              <button onClick={() => load(page + 1, q, true)} style={{ padding: "8px 20px", background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>
+              <button onClick={() => load(page + 1, true)} style={{ padding: "8px 20px", background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>
                 טען עוד ({(total - rows.length).toLocaleString()} נותרו)
               </button>
             </div>

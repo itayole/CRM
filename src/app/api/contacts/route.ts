@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -31,8 +32,14 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get("q");
   const status = searchParams.get("status");
   const clientId = searchParams.get("clientId");
+  const sort = searchParams.get("sort") ?? "name_asc";
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
   const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") ?? 50)));
+
+  const orderBy: Prisma.ContactOrderByWithRelationInput =
+    sort === "name_desc" ? { fullName: "desc" }
+    : sort === "company_asc" ? { companyName: "asc" }
+    : { fullName: "asc" };
 
   // clientId scopes to a client's contacts (used by the project/lead pickers),
   // but a free-text query searches across all contacts so cross-company people
@@ -46,7 +53,7 @@ export async function GET(req: NextRequest) {
   };
 
   const [contacts, total] = await Promise.all([
-    prisma.contact.findMany({ where, include, orderBy: { fullName: "asc" }, skip: (page - 1) * limit, take: limit }),
+    prisma.contact.findMany({ where, include, orderBy, skip: (page - 1) * limit, take: limit }),
     prisma.contact.count({ where }),
   ]);
 

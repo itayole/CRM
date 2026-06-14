@@ -15,6 +15,7 @@ export default function ClientsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
+  const [sort, setSort] = useState("name_asc");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [selected, setSelected] = useState<CrmClientRow | null>(null);
@@ -25,10 +26,10 @@ export default function ClientsPage() {
   const [editErr, setEditErr] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async (p: number, query: string, append: boolean) => {
+  const load = useCallback(async (p: number, append: boolean) => {
     setLoading(true); setErr("");
     try {
-      const res = await fetchClients({ page: p, q: query, limit: 60 });
+      const res = await fetchClients({ page: p, q, sort, limit: 60 });
       setTotal(res.total); setPage(res.page);
       setRows(prev => (append ? [...prev, ...res.data] : res.data));
     } catch (e) {
@@ -36,13 +37,14 @@ export default function ClientsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [q, sort]);
 
   useEffect(() => { fetchActiveUsers().then(setUsers); }, []);
+  // Reload page 1 whenever the query/sort/filters change (debounced for typing).
   useEffect(() => {
-    const t = setTimeout(() => load(1, q, false), q ? 300 : 0);
+    const t = setTimeout(() => load(1, false), q ? 300 : 0);
     return () => clearTimeout(t);
-  }, [q, load]);
+  }, [load, q]);
 
   const canLoadMore = rows.length < total;
 
@@ -84,7 +86,7 @@ export default function ClientsPage() {
     const res = await deleteClient(c.id);
     if (!res.ok) { alert(res.message ?? "מחיקת הלקוח נכשלה"); return; }
     setSelected(null);
-    load(1, q, false);
+    load(1, false);
   };
 
   const save = async () => {
@@ -117,7 +119,7 @@ export default function ClientsPage() {
     setSaving(false);
     if (!res.ok) { setEditErr(res.message ?? "השמירה נכשלה"); return; }
     closeModal();
-    load(1, q, false);
+    load(1, false);
   };
 
   return (
@@ -172,9 +174,19 @@ export default function ClientsPage() {
           <Stat label="עם אנשי קשר" value={`${rows.filter(c => c.contactCount > 0).length} / ${rows.length}`} sub="מתוך המוצגים" color={GOLD} />
         </div>
 
-        <Input value={q} onChange={setQ} placeholder="🔍 חיפוש לקוח לפי שם / תעשייה / מייל..." style={{ width: "100%", marginBottom: 12 }} />
+        <Input value={q} onChange={setQ} placeholder="🔍 חיפוש לקוח לפי שם / תעשייה / מייל..." style={{ width: "100%", marginBottom: 8 }} />
 
-        {err && <div style={{ textAlign: "center", padding: 24, color: ERR, fontSize: 12 }}>⚠ {err} <button onClick={() => load(1, q, false)} style={{ marginRight: 8, textDecoration: "underline", background: "none", border: "none", color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>נסה שוב</button></div>}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          <Select value={sort} onChange={setSort} options={[
+            { value: "name_asc", label: "מיון: שם א׳→ת׳" },
+            { value: "name_desc", label: "מיון: שם ת׳→א׳" },
+            { value: "projects_desc", label: "מיון: הכי הרבה פרויקטים" },
+            { value: "contacts_desc", label: "מיון: הכי הרבה אנשי קשר" },
+            { value: "recent", label: "מיון: נוספו לאחרונה" },
+          ]} />
+        </div>
+
+        {err && <div style={{ textAlign: "center", padding: 24, color: ERR, fontSize: 12 }}>⚠ {err} <button onClick={() => load(1, false)} style={{ marginRight: 8, textDecoration: "underline", background: "none", border: "none", color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>נסה שוב</button></div>}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 10 }}>
           {rows.map(c => (
@@ -202,7 +214,7 @@ export default function ClientsPage() {
         {!loading && rows.length === 0 && !err && <div style={{ textAlign: "center", padding: 32, color: MUTED, fontSize: 12 }}>לא נמצאו לקוחות</div>}
         {!loading && canLoadMore && (
           <div style={{ textAlign: "center", marginTop: 14 }}>
-            <button onClick={() => load(page + 1, q, true)} style={{ padding: "8px 20px", background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>
+            <button onClick={() => load(page + 1, true)} style={{ padding: "8px 20px", background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>
               טען עוד ({(total - rows.length).toLocaleString()} נותרו)
             </button>
           </div>

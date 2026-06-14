@@ -455,9 +455,12 @@ export async function fetchClient(id: number): Promise<CrmClientDetail> {
   return (await jsonOrThrow(res)) as CrmClientDetail;
 }
 
-export async function fetchClients(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmClientRow>> {
+export async function fetchClients(params: { q?: string; page?: number; limit?: number; sort?: string; status?: string; assigneeId?: number } = {}): Promise<Page<CrmClientRow>> {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.status) qs.set("status", params.status);
+  if (params.assigneeId) qs.set("assigneeId", String(params.assigneeId));
   qs.set("page", String(params.page ?? 1));
   qs.set("limit", String(params.limit ?? 60));
   const res = await fetch(apiUrl(`/api/clients?${qs}`), { cache: "no-store" });
@@ -495,9 +498,11 @@ export async function createProject(input: ProjectCreateInput): Promise<{ ok: bo
   return { ok: false, message: typeof b?.error === "string" ? b.error : "שמירת הפרויקט נכשלה" };
 }
 
-export async function fetchProjects(params: { q?: string; page?: number; limit?: number } = {}): Promise<Page<CrmProjectRow>> {
+export async function fetchProjects(params: { q?: string; page?: number; limit?: number; sort?: string; assigneeId?: number } = {}): Promise<Page<CrmProjectRow>> {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.assigneeId) qs.set("assigneeId", String(params.assigneeId));
   qs.set("page", String(params.page ?? 1));
   qs.set("limit", String(params.limit ?? 60));
   const res = await fetch(apiUrl(`/api/projects?${qs}`), { cache: "no-store" });
@@ -580,10 +585,12 @@ export interface ContactInput {
   companyName?: string | null; category?: string | null; newsletter?: boolean; status?: string | null;
   clientId?: number | null; accountManagerId?: number | null;
 }
-export async function fetchContacts(params: { q?: string; clientId?: number; page?: number; limit?: number } = {}): Promise<Page<CrmContactRow>> {
+export async function fetchContacts(params: { q?: string; clientId?: number; page?: number; limit?: number; sort?: string; status?: string } = {}): Promise<Page<CrmContactRow>> {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
   if (params.clientId) qs.set("clientId", String(params.clientId));
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.status) qs.set("status", params.status);
   qs.set("page", String(params.page ?? 1));
   qs.set("limit", String(params.limit ?? 60));
   const res = await fetch(apiUrl(`/api/contacts?${qs}`), { cache: "no-store" });

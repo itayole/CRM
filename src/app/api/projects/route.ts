@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -21,6 +22,8 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = req.nextUrl;
   const search = searchParams.get("q");
+  const sort = searchParams.get("sort") ?? "newest";
+  const assigneeFilter = searchParams.get("assigneeId");
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
   const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") ?? 50)));
 
@@ -28,7 +31,8 @@ export async function GET(req: NextRequest) {
   const userId = Number(session.user.id);
 
   const where = {
-    ...(isAdmin ? {} : { assigneeId: userId }),
+    // Non-admins only ever see their own projects; admins may filter by assignee.
+    ...(isAdmin ? (assigneeFilter ? { assigneeId: Number(assigneeFilter) } : {}) : { assigneeId: userId }),
     ...(search
       ? {
           OR: [
@@ -40,6 +44,14 @@ export async function GET(req: NextRequest) {
       : {}),
   };
 
+  const orderBy: Prisma.ProjectOrderByWithRelationInput =
+    sort === "oldest" ? { projectNo: "asc" }
+    : sort === "billing_desc" ? { billing: "desc" }
+    : sort === "billing_asc" ? { billing: "asc" }
+    : sort === "name_asc" ? { name: "asc" }
+    : sort === "updated" ? { lastUpdated: "desc" }
+    : { projectNo: "desc" };
+
   const [projects, total] = await Promise.all([
     prisma.project.findMany({
       where,
@@ -48,7 +60,7 @@ export async function GET(req: NextRequest) {
         assignee: { select: { id: true, name: true } },
         contact: { select: { id: true, fullName: true } },
       },
-      orderBy: { projectNo: "desc" },
+      orderBy,
       skip: (page - 1) * limit,
       take: limit,
     }),

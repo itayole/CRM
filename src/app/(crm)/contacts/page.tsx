@@ -16,6 +16,8 @@ export default function ContactsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
+  const [sort, setSort] = useState("name_asc");
+  const [statusFilter, setStatusFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [selected, setSelected] = useState<CrmContactRow | null>(null);
@@ -27,10 +29,10 @@ export default function ContactsPage() {
   const [clientQuery, setClientQuery] = useState("");
   const [clientResults, setClientResults] = useState<Named[]>([]);
 
-  const load = useCallback(async (p: number, query: string, append: boolean) => {
+  const load = useCallback(async (p: number, append: boolean) => {
     setLoading(true); setErr("");
     try {
-      const res = await fetchContacts({ page: p, q: query, limit: 60 });
+      const res = await fetchContacts({ page: p, q, sort, status: statusFilter || undefined, limit: 60 });
       setTotal(res.total); setPage(res.page);
       setRows(prev => (append ? [...prev, ...res.data] : res.data));
     } catch (e) {
@@ -38,13 +40,14 @@ export default function ContactsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [q, sort, statusFilter]);
 
   useEffect(() => { fetchActiveUsers().then(setUsers); }, []);
+  // Reload page 1 whenever query/sort/status changes (debounced for typing).
   useEffect(() => {
-    const t = setTimeout(() => load(1, q, false), q ? 300 : 0);
+    const t = setTimeout(() => load(1, false), q ? 300 : 0);
     return () => clearTimeout(t);
-  }, [q, load]);
+  }, [load, q]);
   useEffect(() => {
     if (!clientQuery) { setClientResults([]); return; }
     const t = setTimeout(async () => {
@@ -86,14 +89,14 @@ export default function ContactsPage() {
       : await updateContact(editId as number, payload);
     setSaving(false);
     if (!res.ok) { setFormErr(res.message ?? "השמירה נכשלה"); return; }
-    setEditId(null); setSelected(null); load(1, q, false);
+    setEditId(null); setSelected(null); load(1, false);
   };
 
   const remove = async (c: CrmContactRow) => {
     if (!window.confirm(`למחוק את ${c.fullName}?`)) return;
     const res = await deleteContact(c.id);
     if (!res.ok) { alert(res.message); return; }
-    setSelected(null); load(1, q, false);
+    setSelected(null); load(1, false);
   };
 
   return (
@@ -169,9 +172,18 @@ export default function ContactsPage() {
           <Stat label="רשומים לדיוור" value={rows.filter(c => c.newsletter).length} sub="מתוך המוצגים" color={GOLD} />
         </div>
 
-        <Input value={q} onChange={setQ} placeholder="🔍 חיפוש לפי שם / מייל / חברה..." style={{ width: "100%", marginBottom: 12 }} />
+        <Input value={q} onChange={setQ} placeholder="🔍 חיפוש לפי שם / מייל / חברה..." style={{ width: "100%", marginBottom: 8 }} />
 
-        {err && <div style={{ textAlign: "center", padding: 24, color: ERR, fontSize: 12 }}>⚠ {err} <button onClick={() => load(1, q, false)} style={{ marginRight: 8, textDecoration: "underline", background: "none", border: "none", color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>נסה שוב</button></div>}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          <Select value={sort} onChange={setSort} options={[
+            { value: "name_asc", label: "מיון: שם א׳→ת׳" },
+            { value: "name_desc", label: "מיון: שם ת׳→א׳" },
+            { value: "company_asc", label: "מיון: חברה א׳→ת׳" },
+          ]} />
+          <Select value={statusFilter} onChange={setStatusFilter} options={[{ value: "", label: "סטטוס: הכל" }, ...STATUS]} />
+        </div>
+
+        {err && <div style={{ textAlign: "center", padding: 24, color: ERR, fontSize: 12 }}>⚠ {err} <button onClick={() => load(1, false)} style={{ marginRight: 8, textDecoration: "underline", background: "none", border: "none", color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>נסה שוב</button></div>}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 10 }}>
           {rows.map(c => (
@@ -197,7 +209,7 @@ export default function ContactsPage() {
         {!loading && rows.length === 0 && !err && <div style={{ textAlign: "center", padding: 32, color: MUTED, fontSize: 12 }}>לא נמצאו אנשי קשר</div>}
         {!loading && canLoadMore && (
           <div style={{ textAlign: "center", marginTop: 14 }}>
-            <button onClick={() => load(page + 1, q, true)} style={{ padding: "8px 20px", background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>
+            <button onClick={() => load(page + 1, true)} style={{ padding: "8px 20px", background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: NAVY, cursor: "pointer", fontFamily: "inherit" }}>
               טען עוד ({(total - rows.length).toLocaleString()} נותרו)
             </button>
           </div>

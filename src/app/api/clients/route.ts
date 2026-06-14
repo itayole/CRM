@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -25,6 +26,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const status = searchParams.get("status");
   const search = searchParams.get("q");
+  const sort = searchParams.get("sort") ?? "name_asc";
+  const assigneeFilter = searchParams.get("assigneeId");
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
   const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") ?? 50)));
 
@@ -32,7 +35,8 @@ export async function GET(req: NextRequest) {
   const userId = Number(session.user.id);
 
   const where = {
-    ...(isAdmin ? {} : { assigneeId: userId }),
+    // Non-admins are always scoped to their own clients; admins may filter by manager.
+    ...(isAdmin ? (assigneeFilter ? { assigneeId: Number(assigneeFilter) } : {}) : { assigneeId: userId }),
     ...(status ? { status } : {}),
     ...(search
       ? {
@@ -45,6 +49,13 @@ export async function GET(req: NextRequest) {
       : {}),
   };
 
+  const orderBy: Prisma.ClientOrderByWithRelationInput =
+    sort === "name_desc" ? { name: "desc" }
+    : sort === "projects_desc" ? { projects: { _count: "desc" } }
+    : sort === "contacts_desc" ? { contactPeople: { _count: "desc" } }
+    : sort === "recent" ? { since: "desc" }
+    : { name: "asc" };
+
   const [clients, total] = await Promise.all([
     prisma.client.findMany({
       where,
@@ -52,7 +63,7 @@ export async function GET(req: NextRequest) {
         assignee: { select: { id: true, name: true } },
         _count: { select: { projects: true, deals: true, contactPeople: true } },
       },
-      orderBy: { name: "asc" },
+      orderBy,
       skip: (page - 1) * limit,
       take: limit,
     }),
